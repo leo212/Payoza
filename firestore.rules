@@ -1,0 +1,18 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // No sign-in: knowing a wallet code or a user id is what grants access.
+    // Listing is blocked so codes and ids cannot be enumerated.
+    match /users/{uid} {
+      allow get, create, update: if true;
+      allow list, delete: if false;
+    }
+    match /wallets/{code} {
+      allow get, create, update: if true;
+      allow list, delete: if false;
+      match /{sub}/{id} {
+        allow read, write: if sub in ['members', 'tx'];
+      }
+    }
+  }
+}
