@@ -1,13 +1,26 @@
-// Static catalog: categories, currencies, avatar colors.
+// Static catalog: categories, currencies, avatar colors, wallet emoji.
 
 export const CATS = [
-  { id: 'flight', name: 'טיסות', icon: 'plane', hue: 205 },
-  { id: 'stay', name: 'לינה', icon: 'bed-double', hue: 262 },
   { id: 'food', name: 'מסעדות', icon: 'utensils', hue: 14 },
+  { id: 'market', name: 'סופר', icon: 'shopping-basket', hue: 96 },
   { id: 'coffee', name: 'קפה ומאפה', icon: 'coffee', hue: 28 },
   { id: 'bar', name: 'בר ומשקאות', icon: 'beer', hue: 42 },
+  { id: 'bills', name: 'חשבונות', icon: 'receipt-text', hue: 210 },
+  { id: 'power', name: 'חשמל', icon: 'zap', hue: 48 },
+  { id: 'water', name: 'מים', icon: 'droplet', hue: 200 },
+  { id: 'gas', name: 'גז', icon: 'flame', hue: 18 },
+  { id: 'net', name: 'אינטרנט', icon: 'wifi', hue: 245 },
+  { id: 'rent', name: 'שכירות ודיור', icon: 'house', hue: 268 },
+  { id: 'building', name: 'ועד בית', icon: 'building-2', hue: 222 },
+  { id: 'repair', name: 'תיקונים ותחזוקה', icon: 'wrench', hue: 30 },
+  { id: 'clean', name: 'ניקיון', icon: 'spray-can', hue: 176 },
+  { id: 'kids', name: 'ילדים', icon: 'baby', hue: 330 },
+  { id: 'pets', name: 'חיות מחמד', icon: 'dog', hue: 36 },
+  { id: 'edu', name: 'לימודים וחוגים', icon: 'graduation-cap', hue: 255 },
+  { id: 'sport', name: 'ספורט', icon: 'dumbbell', hue: 140 },
+  { id: 'flight', name: 'טיסות', icon: 'plane', hue: 205 },
+  { id: 'stay', name: 'לינה', icon: 'bed-double', hue: 262 },
   { id: 'wine', name: 'יין ויקבים', icon: 'wine', hue: 340 },
-  { id: 'market', name: 'סופר', icon: 'shopping-basket', hue: 96 },
   { id: 'train', name: 'רכבת ואוטובוס', icon: 'train-front', hue: 188 },
   { id: 'taxi', name: 'מונית', icon: 'car-taxi-front', hue: 50 },
   { id: 'car', name: 'רכב שכור', icon: 'car', hue: 222 },
@@ -55,4 +68,4 @@ export const CURS = C.map(([code, sym, name, flag, usd]) => ({ code, sym, name, 
 export const CUR = Object.fromEntries(CURS.map(c => [c.code, c]));
 
 export const COLORS = ['#0FB5A6', '#FF6A4D', '#FFB020', '#6C5CE7', '#2D9CDB', '#E84393', '#27AE60', '#F2784B', '#8E6CEF', '#00B8D9'];
-export const TRIP_EMOJI = ['🏝️', '🏔️', '🗼', '🗽', '🏕️', '🚐', '⛷️', '🛕', '🏜️', '🚢', '🎡', '🍜', '🌋', '🦁', '🎒', '🌍'];
+export const WALLET_EMOJI = ['👛', '🏠', '🏢', '👨‍👩‍👧', '💑', '🎉', '🍕', '🛒', '⚽', '🎓', '💼', '🏝️', '🏔️', '🏕️', '✈️', '🌍'];
