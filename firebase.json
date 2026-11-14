@@ -1,0 +1,20 @@
+{
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "hosting": {
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      "firestore.rules",
+      "README.md",
+      "tools/**",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "headers": [
+      { "source": "**/*.@(js|css)", "headers": [{ "key": "Cache-Control", "value": "max-age=300" }] },
+      { "source": "fonts/**", "headers": [{ "key": "Cache-Control", "value": "max-age=31536000, immutable" }] }
+    ]
+  }
+}
