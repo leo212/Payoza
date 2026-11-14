@@ -1,14 +1,9 @@
 // Firebase web config. These values are public identifiers, not secrets.
-// While this is null the app runs in local demo mode: data stays in this
-// browser only and cannot be shared with other people.
-//
-// To turn on sharing, paste the config object from
-// Firebase console → Project settings → Your apps → Web app:
-//
-// export const firebaseConfig = {
-//   apiKey: '...',
-//   authDomain: '...',
-//   projectId: '...',
-//   appId: '...',
-// };
-export const firebaseConfig = null;
+export const firebaseConfig = {
+  apiKey: 'AIzaSyCJ3ZiM_-CPFthyXkoXUR0xfeZUryr42lw',
+  authDomain: 'payzo-f14a3.firebaseapp.com',
+  projectId: 'payzo-f14a3',
+  storageBucket: 'payzo-f14a3.firebasestorage.app',
+  messagingSenderId: '567155102573',
+  appId: '1:567155102573:web:9704e0adfccb4d3e998064',
+};
