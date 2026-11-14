@@ -3,7 +3,7 @@
 // It signs you in (browser), creates the web app and the Firestore database
 // if they are missing, writes js/config.js, deploys the rules and the site.
 import { spawnSync } from 'node:child_process';
-import { writeFileSync, existsSync } from 'node:fs';
+import { writeFileSync, readFileSync, existsSync } from 'node:fs';
 
 const CLI = 'firebase-tools@13.35.1';
 const LOCATION = process.env.PZ_LOCATION || 'me-west1';
@@ -47,7 +47,9 @@ const sdk = conf?.sdkConfig || (conf?.fileContents && JSON.parse(conf.fileConten
 if (!sdk?.apiKey) die('Could not read the web app config.');
 const pick = ({ apiKey, authDomain, projectId, storageBucket, messagingSenderId, appId: id }) => ({ apiKey, authDomain, projectId, storageBucket, messagingSenderId, appId: id });
 const configJs = `// Firebase web config. These values are public identifiers, not secrets.\nexport const firebaseConfig = ${JSON.stringify(pick(sdk), null, 2)};\n`;
-writeFileSync('js/config.js', configJs);
+// Leave an identical config untouched so a git checkout stays clean.
+const prev = existsSync('js/config.js') ? readFileSync('js/config.js', 'utf8') : '';
+if (!prev.includes(`'${sdk.projectId}'`) && !prev.includes(`"${sdk.projectId}"`)) writeFileSync('js/config.js', configJs);
 writeFileSync('.firebaserc', JSON.stringify({ projects: { default: project } }, null, 2) + '\n');
 console.log('Wrote js/config.js');
 
@@ -55,7 +57,9 @@ step('Firestore database');
 const dbs = fb(['firestore:databases:list', '--project', project], { json: true }) || [];
 if (dbs.some(d => String(d.name || '').endsWith('/(default)'))) console.log('Database already exists');
 else if (!fb(['firestore:databases:create', '(default)', '--location', LOCATION, '--project', project])) {
-  die('Could not create the database. Create it in the console (Build → Firestore Database → Create database), then run this again.');
+  die('Could not create the database. If the message above says the Cloud Firestore API is disabled, enable it here, wait a minute and run this again:\n  ' +
+    `https://console.cloud.google.com/apis/library/firestore.googleapis.com?project=${project}\n` +
+    'Or create the database in the console (Build → Firestore Database → Create database).');
 }
 
 step('Deploying security rules and the site');
