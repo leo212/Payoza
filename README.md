@@ -10,21 +10,19 @@
 
 אתר סטטי בלי שלב build: `index.html`, `css/`, `js/`, `fonts/`.
 
-## הפעלת שיתוף בין מכשירים (Firebase)
+## הקמה ופרסום ב-Firebase (פקודה אחת)
 
-עד שמגדירים Firebase האפליקציה רצה ב"מצב מקומי": הנתונים נשמרים רק בדפדפן אחד.
+צריך Node.js 18 ומעלה. מתוך תיקיית הפרויקט:
 
-1. ב-[Firebase console](https://console.firebase.google.com) יוצרים פרויקט (חינמי).
-2. Build → Firestore Database → Create database (production mode).
-3. בלשונית Rules מדביקים את התוכן של `firestore.rules` ולוחצים Publish.
-4. Project settings → Your apps → Web app (`</>`) → מעתיקים את אובייקט `firebaseConfig`.
-5. מדביקים אותו ב-`js/config.js` במקום `null`.
+```
+node tools/firebase-setup.mjs <project-id>
+```
+
+הסקריפט פותח חלון התחברות ל-Google, יוצר אפליקציית Web ומסד Firestore אם הם חסרים, כותב את `js/config.js`, מעלה את `firestore.rules` ומפרסם את האתר ל-`https://<project-id>.web.app`. אפשר להריץ אותו שוב בכל עדכון. מיקום המסד הוא `me-west1` כברירת מחדל (משנים עם `PZ_LOCATION`).
+
+בלי `js/config.js` מלא האפליקציה רצה ב"מצב מקומי": הנתונים נשמרים רק בדפדפן אחד.
 
 הערכים ב-`firebaseConfig` הם מזהים ציבוריים ולא סודות. ההגנה היא בכללי Firestore: מי שמחזיק בקוד הארנק יכול לקרוא ולכתוב בו, ואי אפשר למנות ארנקים או משתמשים.
-
-## פרסום ב-GitHub Pages
-
-Settings → Pages → Source: Deploy from a branch → בוחרים את הענף ואת `/ (root)`.
 
 ## הרצה מקומית
 
