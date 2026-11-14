@@ -239,6 +239,31 @@ em.wait .ic { width: 11px; height: 11px; }
 .choose-avs { display: flex; align-items: center; gap: 14px; color: var(--muted); }
 .choose .hint { font-size: 13px; }
 
+.switch-box { display: flex; flex-direction: column; gap: 10px; width: 100%; padding: 14px; border-radius: 18px; background: var(--surface); box-shadow: var(--shadow); text-align: start; }
+.switch-box .warn { display: flex; gap: 8px; align-items: flex-start; color: var(--ink); font-size: 14px; max-width: none; text-wrap: pretty; }
+.switch-box .warn .ic { color: var(--coral); margin-top: 2px; }
+.switch-box .warn b { font-weight: 700; }
+.check { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 14px; font-weight: 600; color: var(--ink); cursor: pointer; }
+.check input { width: 20px; height: 20px; accent-color: var(--lagoon); }
+.btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+.log { display: flex; flex-direction: column; }
+.log-row { display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+.log-row:first-child { border-top: 0; }
+.log-ic { display: grid; place-items: center; width: 34px; height: 34px; flex: none; border-radius: 11px; background: var(--surface-2); color: var(--muted); }
+.log-ic .ic { width: 17px; height: 17px; }
+.log-ic.add { background: var(--pos-bg); color: var(--pos); }
+.log-ic.del { background: var(--neg-bg); color: var(--neg); }
+.log-ic.edit { background: color-mix(in srgb, var(--sun) 18%, transparent); color: #B97700; }
+.log-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
+.log-main b { font-weight: 600; font-size: 14.5px; }
+.log-main small { color: var(--muted); font-size: 13px; }
+.log-main time { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.log-main .btn { margin-top: 4px; }
+.log-diff { display: flex; flex-direction: column; gap: 2px; font-size: 13px; padding: 6px 10px; border-radius: 10px; background: var(--surface-2); width: 100%; }
+.log-diff span { color: var(--muted); }
+.log-diff s { color: var(--muted); }
+.log-body .spinner { margin: 24px auto; }
+
 /* tab bar */
 .tabbar { position: fixed; z-index: 20; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); left: 50%; translate: -50% 0; width: min(488px, calc(100% - 24px)); display: grid; grid-template-columns: 1fr 1fr 64px 1fr 1fr; align-items: center; padding: 6px; border-radius: 26px; background: color-mix(in srgb, var(--surface) 86%, transparent); backdrop-filter: blur(18px) saturate(1.4); -webkit-backdrop-filter: blur(18px) saturate(1.4); box-shadow: var(--shadow), 0 0 0 1px var(--line); animation: rise .5s var(--ease) backwards; view-transition-name: tabbar; }
 .tab { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 7px 0; border-radius: 18px; font-size: 11px; font-weight: 600; color: var(--muted); transition: color .2s, background .2s; }

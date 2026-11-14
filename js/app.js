@@ -179,7 +179,8 @@ function subscribe(code) {
     S.my = myIdIn(snap.members);
     const m = snap.members[S.my];
     if (!m) {
-      store.setMember(code, S.my, { name: me.name, color: me.color, joinedAt: m?.joinedAt || Date.now() }).catch(() => {});
+      store.setMember(code, S.my, { name: me.name, color: me.color, joinedAt: m?.joinedAt || Date.now() })
+        .then(() => logAct('member.join', { memberId: S.my, name: me.name }, { code, by: S.my, byName: me.name })).catch(() => {});
     }
     if (!me.wallets.includes(code)) { me.wallets.unshift(code); saveMe(); }
     saveSum(S.wallet);
@@ -439,10 +440,11 @@ function tabCrew(w, c, mem) {
       <div class="share-main"><small>קוד הצטרפות</small><button class="code" data-act="copy-code"><bdi>${showCode(w.code)}</bdi>${icon('copy')}</button>
         <div class="share-btns"><button class="btn primary small" data-act="share">${icon('share-2')} שיתוף קישור</button><button class="btn ghost small" data-act="copy-link">${icon('link')} העתקה</button></div></div>
     </section>
-    <section class="block"><div class="block-head"><h2>${mem.length} חברים בארנק</h2><button class="btn small ghost" data-act="add-member">${icon('user-plus')} הוספת חבר</button></div><ul class="crew">${mem.map((m, i) => `<li style="--i:${i}" class="tappable${isPending(m) ? ' pending' : ''}" data-act="invite" data-id="${m.uid}" role="button" tabindex="0" aria-label="הקישור האישי של ${esc(m.name)}">${avatar(m, 'lg')}<span class="crew-main"><b>${esc(m.name)}${m.uid === MY() ? '<em>אני</em>' : ''}${isPending(m) ? `<em class="wait">${icon('link')} טרם הצטרף/ה</em>` : devicesOf(m.uid, m) > 1 ? `<em>${icon('smartphone')} ${devicesOf(m.uid, m)}</em>` : ''}</b><small>שילם/ה ${money(c.paid[m.uid] || 0, base)} · חלק ${money(c.share[m.uid] || 0, base)}</small></span>${money(c.bal[m.uid] || 0, base, { sign: true, cls: (c.bal[m.uid] || 0) > 0.005 ? 'pos' : (c.bal[m.uid] || 0) < -0.005 ? 'neg' : '' })}</li>`).join('')}</ul></section>
+    <section class="block"><div class="block-head"><h2>${mem.length} חברים בארנק</h2><button class="btn small ghost" data-act="add-member">${icon('user-plus')} הוספת חבר</button></div><ul class="crew">${mem.map((m, i) => `<li style="--i:${i}"${canSeeLink(m.uid, m) ? ` class="tappable${isPending(m) ? ' pending' : ''}" data-act="invite" data-id="${m.uid}" role="button" tabindex="0" aria-label="הקישור האישי של ${esc(m.name)}"` : isPending(m) ? ' class="pending"' : ''}>${avatar(m, 'lg')}<span class="crew-main"><b>${esc(m.name)}${m.uid === MY() ? '<em>אני</em>' : ''}${isPending(m) ? `<em class="wait">${icon('link')} טרם הצטרף/ה</em>` : devicesOf(m.uid, m) > 1 ? `<em>${icon('smartphone')} ${devicesOf(m.uid, m)}</em>` : ''}</b><small>שילם/ה ${money(c.paid[m.uid] || 0, base)} · חלק ${money(c.share[m.uid] || 0, base)}</small></span>${money(c.bal[m.uid] || 0, base, { sign: true, cls: (c.bal[m.uid] || 0) > 0.005 ? 'pos' : (c.bal[m.uid] || 0) < -0.005 ? 'neg' : '' })}</li>`).join('')}</ul></section>
     <section class="block"><h2>הגדרות הארנק</h2>
       <button class="row-btn" data-act="rename">${icon('pencil')}<span>שם ואימוג׳י</span><small>${esc(w.meta.emoji || '')} ${esc(w.meta.name)}</small>${icon('chevron-left')}</button>
       <div class="row-btn static">${icon('globe')}<span>מטבע המאזן</span><small>${CUR[base]?.flag || ''} ${CUR[base]?.name || base}</small></div>
+      <button class="row-btn" data-act="log">${icon('history')}<span>יומן פעילות</span><small>הוספות, עריכות ומחיקות</small>${icon('chevron-left')}</button>
       <button class="row-btn" data-act="my-name">${icon('user')}<span>השם שלי בארנק</span><small>${esc(w.members[MY()]?.name || me.name)}</small>${icon('chevron-left')}</button>
       <button class="row-btn" data-act="invite" data-id="${MY()}">${icon('link')}<span>הקישור האישי שלי</span><small>לבן/בת זוג</small>${icon('chevron-left')}</button>
       <button class="row-btn danger" data-act="leave">${icon('log-out')}<span>הסרת הארנק מהרשימה שלי</span></button>
@@ -454,6 +456,8 @@ const isPending = m => !!m.pending && !linksOf(m).length;
 const tokenOf = (pid, m) => (pid.startsWith('IN-') ? pid : m?.key);
 const inviteLink = (code, token) => !token ? '' : EMBED ? (window.PZ_URL ? `${window.PZ_URL}#i-${code}-${token}` : '') : `${location.origin}${location.pathname}#/i/${code}/${token}`;
 const linkOfMember = pid => inviteLink(S.wallet.code, tokenOf(pid, S.wallet.members[pid]));
+// You see your own personal link, and the links of members you added yourself.
+const canSeeLink = (pid, m) => pid === MY() || (!!m?.addedBy && (m.addedBy === MY() || m.addedBy === me.uid));
 const devicesOf = (pid, m) => linksOf(m).length + (pid.startsWith('IN-') ? 0 : 1);
 const usedBy = (w, id) => Object.values(w.tx).some(t => t.payer === id || t.from === id || t.to === id || (t.shares && id in t.shares));
 const shareLink = code => EMBED ? (window.PZ_URL ? `${window.PZ_URL}#j-${code}` : showCode(code)) : `${location.origin}${location.pathname}#/j/${code}`;
@@ -588,7 +592,8 @@ async function submitExpense() {
   ls.set('pz_cur_' + w.code, F.cur);
   const editing = !!F.id;
   closeSheet();
-  try { await store.setTx(w.code, F.id || newId(), tx); toast(editing ? 'ההוצאה עודכנה' : 'ההוצאה נוספה'); }
+  const txId = F.id || newId(), before = editing ? w.tx[txId] : null;
+  try { await store.setTx(w.code, txId, tx); logAct(editing ? 'tx.edit' : 'tx.add', { txId, before, after: tx }); toast(editing ? 'ההוצאה עודכנה' : 'ההוצאה נוספה'); }
   catch { toast('השמירה נכשלה. כדאי לנסות שוב', 'err'); }
 }
 
@@ -624,7 +629,8 @@ async function submitSettle() {
   if (G.from === G.to) return fail('המעביר והמקבל חייבים להיות אנשים שונים.');
   const tx = { type: 's', amount, cur: G.cur, rate, from: G.from, to: G.to, note: $('#sf-note').value.trim(), date: $('#sf-date').value || today(), by: MY(), ts: Date.now() };
   closeSheet();
-  try { await store.setTx(w.code, newId(), tx); toast('ההעברה תועדה'); confetti(); }
+  const txId = newId();
+  try { await store.setTx(w.code, txId, tx); logAct('tx.add', { txId, after: tx }); toast('ההעברה תועדה'); confetti(); }
   catch { toast('השמירה נכשלה. כדאי לנסות שוב', 'err'); }
 }
 
@@ -646,6 +652,7 @@ function txSheet(id) {
       ${foreign ? `<div><dt>${icon('globe')} שער</dt><dd><bdi>1 ${t.cur} = ${CUR[base].sym}${t.rate}</bdi> · ${money(t.amount * t.rate, base)}</dd></div>` : ''}
       ${t.type === 's' && t.note ? `<div><dt>${icon('info')} הערה</dt><dd>${esc(t.note)}</dd></div>` : ''}
       <div><dt>${icon('user')} תועד ע״י</dt><dd>${esc(M[t.by]?.name || '?')}</dd></div></dl>
+    <button type="button" class="row-btn" data-act="log" data-tx="${id}">${icon('history')}<span>היסטוריית שינויים</span>${icon('chevron-left')}</button>
     <div class="grid2">${t.type === 's' ? '' : `<button class="btn ghost" data-act="edit-x" data-id="${id}">${icon('pencil')} עריכה</button>`}<button class="btn danger" data-act="del-x" data-id="${id}">${icon('trash-2')} מחיקה</button></div></div>`);
 }
 
@@ -688,6 +695,7 @@ function addMemberSheet() {
 async function inviteSheet(pid) {
   const w = S.wallet, m = w.members[pid];
   if (!m) return;
+  if (!canSeeLink(pid, m)) return toast('אפשר לראות רק את הקישור האישי שלך, או של חברים שהוספת', 'err');
   let token = tokenOf(pid, m);
   if (!token) {
     token = 'K-' + rand(12);
@@ -727,7 +735,10 @@ async function acceptInvite(code, token) {
   const fresh = !me.name;
   if (fresh) { me.name = g.name; me.color = g.color || me.color; }
   if (prevId !== pid && pid !== me.uid) {
-    try { await store.setMember(code, pid, { links: [...linksOf(g), me.uid], pending: false, claimedAt: Date.now() }); }
+    try {
+      await store.setMember(code, pid, { links: [...linksOf(g), me.uid], pending: false, claimedAt: Date.now() });
+      logAct('member.device', { memberId: pid, name: g.name }, { code, by: pid, byName: g.name });
+    }
     catch { toast('החיבור נכשל. כדאי לפתוח את הקישור שוב', 'err'); return go('#/'); }
   }
   if (!me.wallets.includes(code)) me.wallets.unshift(code);
@@ -735,16 +746,30 @@ async function acceptInvite(code, token) {
   toast(fresh ? `ברוך הבא! נכנסת לארנק בתור ${g.name}` : `${w.meta.name}: נכנסת בתור ${g.name}`);
   go(`#/w/${code}`);
 }
-function chooseIdentity(w, code, prevId, pid) {
+async function chooseIdentity(w, code, prevId, pid) {
   const prev = w.members[prevId], g = w.members[pid];
-  const own = prevId === me.uid, keepsHistory = own && usedBy(w, prevId);
+  // An own membership with no expenses is removed on switching; anything else stays and
+  // can only be reached again through its personal link, so show that link first.
+  const removable = prevId === me.uid && !usedBy(w, prevId);
+  let token = removable ? null : tokenOf(prevId, prev);
+  if (!removable && !token) {
+    token = 'K-' + rand(12);
+    try { await store.setMember(code, prevId, { key: token }); } catch { token = null; }
+  }
+  const back = token ? inviteLink(code, token) : '';
   app.innerHTML = `<section class="center-msg choose">
     <div class="choose-avs">${avatar(prev, 'xl')}${icon('arrow-left-right')}${avatar(g, 'xl')}</div>
     <b>כבר נמצא/ת בארנק "${esc(w.meta.name)}"</b>
     <p>במכשיר הזה נכנסת בתור <b>${esc(prev.name)}</b>, והקישור שפתחת הוא של <b>${esc(g.name)}</b>. אם זה קישור ששלחת לשותף, אין צורך לעשות כלום: הוא יעבוד אצלו.</p>
     <button class="btn primary wide" data-act="stay-as" data-code="${code}">${icon('check')} להמשיך בתור ${esc(prev.name)}</button>
-    <button class="btn ghost wide" data-act="switch-as" data-code="${code}" data-from="${prevId}" data-to="${pid}">${icon('arrow-left-right')} לעבור במכשיר הזה ל${esc(g.name)}</button>
-    <p class="hint">המעבר משנה רק את המכשיר הזה. ${keepsHistory ? `ההוצאות של ${esc(prev.name)} נשארות שלו, ואפשר לחזור אליו דרך הקישור האישי שלו.` : 'שום הוצאה לא משתנה.'}</p>
+    <div class="switch-box">
+      <p class="warn">${icon('circle-alert')}<span>${removable
+        ? `אחרי המעבר, ${esc(prev.name)} יוסר מהארנק כי אין לו אף הוצאה. שום הוצאה לא משתנה.`
+        : `אחרי המעבר, המכשיר הזה כבר לא יהיה ${esc(prev.name)}. ההוצאות שלו נשארות כמו שהן, אבל אפשר לחזור אליו <b>רק דרך הקישור האישי שלו</b>. כדאי לשמור אותו עכשיו:`}</span></p>
+      ${back ? `<button type="button" class="uid link-box" data-act="copy-prev" data-link="${esc(back)}"><bdi>${esc(back)}</bdi>${icon('copy')}</button>
+      <label class="check"><input type="checkbox" id="saved-link" data-act="saved-link"> שמרתי את הקישור של ${esc(prev.name)}</label>` : ''}
+      <button class="btn ghost wide" data-act="switch-as" data-code="${code}" data-from="${prevId}" data-to="${pid}"${back ? ' disabled' : ''}>${icon('arrow-left-right')} לעבור במכשיר הזה ל${esc(g.name)}</button>
+    </div>
   </section>`;
 }
 async function switchIdentity(code, from, to) {
@@ -760,9 +785,86 @@ async function switchIdentity(code, from, to) {
     } else if (prev) {
       await store.setMember(code, from, { links: linksOf(prev).filter(u => u !== me.uid), linked: null });
     }
+    logAct('member.switch', { from: prev?.name, to: g.name }, { code, by: to, byName: g.name });
   } catch { toast('המעבר נכשל. כדאי לנסות שוב', 'err'); return go(`#/w/${code}`); }
   toast(`במכשיר הזה את/ה עכשיו ${g.name}`);
   go(`#/w/${code}`);
+}
+/* activity log */
+// Every change is recorded with a snapshot of the expense before and after, so a
+// deletion or an edit can always be traced and an accidentally deleted expense restored.
+function logAct(act, data = {}, who = {}) {
+  const code = who.code || S.wallet?.code;
+  if (!code) return;
+  const by = who.by || MY();
+  const entry = JSON.parse(JSON.stringify({ ts: Date.now(), act, by, byName: who.byName || S.wallet?.members?.[by]?.name || me.name, device: me.uid, ...data }));
+  store.addLog(code, newId(), entry).catch(() => {});
+}
+let LOG = {};
+const txLabel = t => t ? (t.type === 's' ? 'העברת תשלום' : t.note || (CAT[t.cat] || CAT.other).name) : '';
+function txDiff(a, b, M) {
+  const nm = id => esc(M[id]?.name || '?');
+  const ratio = sh => Object.entries(sh || {}).sort().map(([k, v]) => `${nm(k)} ${v}`).join(', ');
+  const out = [];
+  if (a.amount !== b.amount || a.cur !== b.cur) out.push(['סכום', money(a.amount, a.cur), money(b.amount, b.cur)]);
+  if ((a.note || '') !== (b.note || '')) out.push(['תיאור', esc(a.note || '—'), esc(b.note || '—')]);
+  if (a.cat !== b.cat) out.push(['קטגוריה', (CAT[a.cat] || CAT.other).name, (CAT[b.cat] || CAT.other).name]);
+  if (a.date !== b.date) out.push(['תאריך', esc(a.date), esc(b.date)]);
+  if (a.payer !== b.payer) out.push(['שילם/ה', nm(a.payer), nm(b.payer)]);
+  if (ratio(a.shares) !== ratio(b.shares)) out.push(['חלוקה', ratio(a.shares), ratio(b.shares)]);
+  if (a.rate !== b.rate && a.cur === b.cur && a.rate && b.rate && a.rate !== 1) out.push(['שער', a.rate, b.rate]);
+  return out;
+}
+function logRow(e, w) {
+  const M = w.members, who = esc(e.byName || M[e.by]?.name || '?'), t = e.after || e.before;
+  const amount = t ? `${money(t.amount, t.cur)}${t.type === 's' ? ` · ${esc(M[t.from]?.name || '?')} ← ${esc(M[t.to]?.name || '?')}` : ''}` : '';
+  const [ic, cls, text] = {
+    'tx.add': ['plus', 'add', t?.type === 's' ? 'תיעד/ה העברה' : 'הוסיף/ה הוצאה'],
+    'tx.edit': ['pencil', 'edit', 'ערך/ה הוצאה'],
+    'tx.del': ['trash-2', 'del', t?.type === 's' ? 'מחק/ה העברה' : 'מחק/ה הוצאה'],
+    'tx.restore': ['refresh-cw', 'add', 'שחזר/ה הוצאה שנמחקה'],
+    'member.add': ['user-plus', 'add', `הוסיף/ה את ${esc(e.name)} לארנק`],
+    'member.del': ['trash-2', 'del', `הסיר/ה את ${esc(e.name)} מהארנק`],
+    'member.join': ['users', 'add', 'הצטרף/ה לארנק'],
+    'member.device': ['smartphone', 'info', 'נכנס/ה מהקישור האישי במכשיר נוסף'],
+    'member.switch': ['arrow-left-right', 'info', `מכשיר עבר מ${esc(e.from || '?')} ל${esc(e.to || '?')}`],
+    'member.rename': ['pencil', 'edit', `שינה/תה שם מ"${esc(e.from || '')}" ל"${esc(e.to || '')}"`],
+    'wallet.create': ['wallet', 'add', `יצר/ה את הארנק`],
+    'wallet.rename': ['pencil', 'edit', `שינה/תה את שם הארנק ל"${esc(e.to || '')}"`],
+  }[e.act] || ['info', 'info', esc(e.act)];
+  const diff = e.act === 'tx.edit' && e.before && e.after ? txDiff(e.before, e.after, M) : [];
+  const canRestore = e.act === 'tx.del' && e.before && !w.tx[e.txId];
+  const when = new Date(e.ts).toLocaleString('he-IL', { day: 'numeric', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+  return `<li class="log-row">
+    <span class="log-ic ${cls}">${icon(ic)}</span>
+    <div class="log-main">
+      <b>${who} ${text}</b>
+      ${t && e.act.startsWith('tx.') ? `<small>${esc(txLabel(t))} · ${amount}</small>` : ''}
+      ${diff.length ? `<ul class="log-diff">${diff.map(([k, from, to]) => `<li><span>${k}:</span> <s>${from}</s> ← ${to}</li>`).join('')}</ul>` : ''}
+      <time>${when}</time>
+      ${canRestore ? `<button class="btn small ghost" data-act="restore-tx" data-log="${e.id}">${icon('refresh-cw')} שחזור ההוצאה</button>` : ''}
+    </div>
+  </li>`;
+}
+async function logSheet(txId) {
+  const w = S.wallet;
+  const el = openSheet(`<div class="form"><h2>${txId ? 'היסטוריית שינויים' : 'יומן פעילות'}</h2><div class="log-body"><div class="spinner"></div></div></div>`, 'tall');
+  let list = [];
+  try { list = await store.getLog(w.code); } catch { /* shown below */ }
+  LOG = Object.fromEntries(list.map(e => [e.id, e]));
+  if (txId) list = list.filter(e => e.txId === txId);
+  $('.log-body', el).innerHTML = list.length
+    ? `<p class="hint">${txId ? 'כל השינויים בהוצאה הזו.' : 'כל השינויים בארנק, מהחדש לישן. אי אפשר למחוק או לערוך את היומן, כך שכל מחיקה נשארת מתועדת.'}</p><ul class="log">${list.map(e => logRow(e, w)).join('')}</ul>`
+    : `<p class="hint">${txId ? 'אין שינויים מתועדים להוצאה הזו. היומן מתעד שינויים מאז שנוסף לאפליקציה.' : 'עוד אין פעילות מתועדת. מעכשיו כל הוספה, עריכה ומחיקה תירשם כאן.'}</p>`;
+}
+async function restoreTx(logId) {
+  const e = LOG[logId], w = S.wallet;
+  if (!e?.before || w.tx[e.txId]) return toast('ההוצאה כבר קיימת בארנק', 'err');
+  try {
+    await store.setTx(w.code, e.txId, e.before);
+    logAct('tx.restore', { txId: e.txId, after: e.before });
+    closeSheet(); toast('ההוצאה שוחזרה');
+  } catch { toast('השחזור נכשל. כדאי לנסות שוב', 'err'); }
 }
 function profileSheet() {
   const dark = document.documentElement.dataset.theme === 'dark' || (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches);
@@ -807,6 +909,10 @@ const acts = {
   'stay-as': el => go(`#/w/${el.dataset.code}`),
   'switch-as': el => switchIdentity(el.dataset.code, el.dataset.from, el.dataset.to),
   'my-name': myNameSheet,
+  log: el => logSheet(el.dataset.tx),
+  'restore-tx': el => restoreTx(el.dataset.log),
+  'saved-link': el => { const btn = $('[data-act="switch-as"]'); if (btn) btn.disabled = !el.checked; },
+  'copy-prev': el => copyText(el.dataset.link, 'הקישור האישי הועתק. כדאי לשמור אותו'),
   invite: el => inviteSheet(el.dataset.id),
   'copy-invite': el => copyText($('.link-box bdi')?.textContent || linkOfMember(el.dataset.id), 'הקישור האישי הועתק'),
   'share-invite': async el => {
@@ -818,13 +924,15 @@ const acts = {
   'del-member': async el => {
     if (!el.classList.contains('armed')) { el.classList.add('armed'); $('span', el).textContent = 'לחיצה נוספת להסרה'; return; }
     closeSheet();
-    try { await store.delMember(S.wallet.code, el.dataset.id); toast('הוסר מהארנק'); } catch { toast('ההסרה נכשלה', 'err'); }
+    const gone = S.wallet.members[el.dataset.id];
+    try { await store.delMember(S.wallet.code, el.dataset.id); logAct('member.del', { memberId: el.dataset.id, name: gone?.name }); toast('הוסר מהארנק'); } catch { toast('ההסרה נכשלה', 'err'); }
   },
   'edit-x': el => { const t = S.wallet.tx[el.dataset.id]; closeSheet(); setTimeout(() => expenseSheet({ id: el.dataset.id, ...t }), 200); },
   'del-x': async el => {
     if (!el.classList.contains('armed')) { el.classList.add('armed'); el.innerHTML = icon('trash-2') + ' לחיצה נוספת למחיקה'; return; }
     closeSheet();
-    try { await store.delTx(S.wallet.code, el.dataset.id); toast('נמחק'); } catch { toast('המחיקה נכשלה', 'err'); }
+    const before = S.wallet.tx[el.dataset.id];
+    try { await store.delTx(S.wallet.code, el.dataset.id); logAct('tx.del', { txId: el.dataset.id, before }); toast('נמחק. אפשר לשחזר מיומן הפעילות'); } catch { toast('המחיקה נכשלה', 'err'); }
   },
   color: el => { $$('.dot', el.parentElement).forEach(d => { d.classList.toggle('on', d === el); d.setAttribute('aria-checked', d === el); }); },
   emoji: el => { $$('.emoji', el.parentElement).forEach(d => d.classList.toggle('on', d === el)); el.closest('form').dataset.emoji = el.dataset.e; },
@@ -863,7 +971,7 @@ document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]');
   if (!el) return;
   const fn = acts[el.dataset.act];
-  if (fn) { if (el.tagName !== 'A') e.preventDefault(); fn(el, e); }
+  if (fn) { if (el.tagName !== 'A' && el.tagName !== 'INPUT') e.preventDefault(); fn(el, e); }
 });
 document.addEventListener('keydown', e => {
   // Enter in the category search picks the first match instead of submitting the expense.
@@ -934,10 +1042,17 @@ const forms = {
     if (!name) return;
     closeSheet();
     try {
-      if (f.dataset.edit === '1') { await store.updateWallet(S.wallet.code, { name, emoji }); return toast('הארנק עודכן'); }
+      if (f.dataset.edit === '1') {
+        const from = S.wallet.meta.name;
+        await store.updateWallet(S.wallet.code, { name, emoji });
+        if (from !== name) logAct('wallet.rename', { from, to: name });
+        return toast('הארנק עודכן');
+      }
       const code = rand(8);
       await store.createWallet(code, { name, emoji, base: $('#nw-cur', f).value, createdAt: Date.now(), createdBy: me.uid });
-      await store.setMember(code, me.uid, { name: $('#nw-me', f).value.trim() || me.name, color: me.color, joinedAt: Date.now() });
+      const myName = $('#nw-me', f).value.trim() || me.name;
+      await store.setMember(code, me.uid, { name: myName, color: me.color, joinedAt: Date.now() });
+      logAct('wallet.create', { name }, { code, by: me.uid, byName: myName });
       me.wallets.unshift(code); saveMe();
       go(`#/w/${code}/crew`);
       toast('הארנק נוצר. אפשר להזמין חברים');
@@ -947,7 +1062,8 @@ const forms = {
     const name = $('#mn-name', f).value.trim();
     if (!name) return;
     closeSheet();
-    try { await store.setMember(S.wallet.code, MY(), { name, color: $('.dot.on', f)?.dataset.c || me.color }); toast('השם בארנק עודכן'); }
+    const from = S.wallet.members[MY()]?.name;
+    try { await store.setMember(S.wallet.code, MY(), { name, color: $('.dot.on', f)?.dataset.c || me.color }); if (from !== name) logAct('member.rename', { memberId: MY(), from, to: name }); toast('השם בארנק עודכן'); }
     catch { toast('השמירה נכשלה. כדאי לנסות שוב', 'err'); }
   },
   'add-member': async f => {
@@ -957,6 +1073,7 @@ const forms = {
     closeSheet();
     try {
       await store.setMember(S.wallet.code, pid, { name, color, pending: true, addedBy: MY(), joinedAt: Date.now() });
+      logAct('member.add', { memberId: pid, name });
       setTimeout(() => inviteSheet(pid), 320);
     } catch { toast('ההוספה נכשלה. כדאי לנסות שוב', 'err'); }
   },
