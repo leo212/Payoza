@@ -1,7 +1,7 @@
 import { icon } from './icons.js';
 import { CATS, CAT, CURS, CUR, COLORS, TRIP_EMOJI } from './data.js';
 import { createStore } from './store.js';
-import { firebaseConfig } from './config.js';
+import { firebaseConfig, canonicalHost } from './config.js';
 
 /* ───────── helpers ───────── */
 const $ = (s, r = document) => r.querySelector(s);
@@ -877,12 +877,44 @@ function confetti() {
   })(t0);
 }
 
+/* ───────── canonical address ───────── */
+// Accounts live in each address's own browser storage, so the move carries the
+// user id in the URL fragment (never sent to any server) and the new address
+// restores the account from it.
+const MOVE = '#pzmove:';
+async function moveToCanonical() {
+  if (EMBED || !canonicalHost || location.hostname === canonicalHost) return false;
+  if (!/\.(web\.app|firebaseapp\.com)$/.test(location.hostname)) return false;
+  // Only move once the new address really serves the app (DNS and certificate ready).
+  try {
+    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 3000);
+    await fetch(`https://${canonicalHost}/js/config.js`, { mode: 'no-cors', cache: 'no-store', signal: ctl.signal });
+    clearTimeout(t);
+  } catch { return false; }
+  const carry = me.name ? `${MOVE}${encodeURIComponent(me.uid)}|` : '';
+  location.replace(`https://${canonicalHost}${location.pathname}${carry}${location.hash}`);
+  return true;
+}
+async function arriveFromMove() {
+  if (!location.hash.startsWith(MOVE)) return;
+  const [uid, ...rest] = decodeURIComponent(location.hash.slice(MOVE.length)).split('|');
+  history.replaceState(null, '', location.pathname + location.search + rest.join('|'));
+  curHash = location.hash;
+  if (me.name || !/^PZ-[A-Z0-9-]{8,20}$/.test(uid)) return; // keep an account this address already has
+  try {
+    const u = await store.getUser(uid);
+    if (u?.name) { Object.assign(me, { uid, name: u.name, color: u.color || me.color, wallets: u.wallets || [] }); saveMe(false); }
+  } catch { /* the user can still restore with their id */ }
+}
+
 /* ───────── boot ───────── */
 (async function boot() {
   const th = ls.get('pz_theme');
   if (th) document.documentElement.dataset.theme = th;
   loadMe();
+  if (await moveToCanonical()) return;
   store = await createStore(firebaseConfig);
+  await arriveFromMove();
   if (me.name) saveMe();
   refreshRates();
   const embedJoin = () => {
