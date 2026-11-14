@@ -720,40 +720,49 @@ async function acceptInvite(code, token) {
   const pid = token.startsWith('IN-') && members[token] ? token : Object.keys(members).find(k => members[k].key === token);
   const g = pid && members[pid];
   if (!g) { toast('הקישור האישי לא תקין, או שהחבר הוסר מהארנק', 'err'); return go('#/'); }
+  const prevId = myIdIn(members), prev = members[prevId];
+  // Already in this wallet as someone else: never change anything without asking.
+  // (Opening a partner's link on your own phone must not touch your membership.)
+  if (prev && prevId !== pid) return chooseIdentity(w, code, prevId, pid);
   const fresh = !me.name;
   if (fresh) { me.name = g.name; me.color = g.color || me.color; }
-  const prevId = myIdIn(members);
   if (prevId !== pid && pid !== me.uid) {
-    // An open wallet view would re-add the old membership while we move it.
-    unsubscribe();
-    try {
-      // Link first, so every view resolves this device to the shared member from now on.
-      await store.setMember(code, pid, { links: [...linksOf(g), me.uid], pending: false, claimedAt: Date.now() });
-      const prev = members[prevId];
-      if (prevId === me.uid && prev) {
-        // This device had its own membership here: move its history onto the shared member.
-        for (const [id, t] of Object.entries(w.tx)) { const t2 = repoint(t, prevId, pid); if (t2) await store.setTx(code, id, t2); }
-        await store.delMember(code, prevId);
-      } else if (prev) {
-        // It was joined to another member through a link: just leave that one.
-        await store.setMember(code, prevId, { links: linksOf(prev).filter(u => u !== me.uid), linked: null });
-      }
-    } catch { toast('החיבור נכשל. כדאי לפתוח את הקישור שוב', 'err'); return go('#/'); }
+    try { await store.setMember(code, pid, { links: [...linksOf(g), me.uid], pending: false, claimedAt: Date.now() }); }
+    catch { toast('החיבור נכשל. כדאי לפתוח את הקישור שוב', 'err'); return go('#/'); }
   }
   if (!me.wallets.includes(code)) me.wallets.unshift(code);
   saveMe();
   toast(fresh ? `ברוך הבא! נכנסת לארנק בתור ${g.name}` : `${w.meta.name}: נכנסת בתור ${g.name}`);
   go(`#/w/${code}`);
 }
-function repoint(t, from, to) {
-  let hit = false;
-  const t2 = { ...t };
-  for (const k of ['payer', 'from', 'to', 'by']) if (t2[k] === from) { t2[k] = to; hit = true; }
-  if (t2.shares && from in t2.shares) {
-    t2.shares = { ...t2.shares, [to]: (t2.shares[to] || 0) + t2.shares[from] };
-    delete t2.shares[from]; hit = true;
-  }
-  return hit ? t2 : null;
+function chooseIdentity(w, code, prevId, pid) {
+  const prev = w.members[prevId], g = w.members[pid];
+  const own = prevId === me.uid, keepsHistory = own && usedBy(w, prevId);
+  app.innerHTML = `<section class="center-msg choose">
+    <div class="choose-avs">${avatar(prev, 'xl')}${icon('arrow-left-right')}${avatar(g, 'xl')}</div>
+    <b>כבר נמצא/ת בארנק "${esc(w.meta.name)}"</b>
+    <p>במכשיר הזה נכנסת בתור <b>${esc(prev.name)}</b>, והקישור שפתחת הוא של <b>${esc(g.name)}</b>. אם זה קישור ששלחת לשותף, אין צורך לעשות כלום: הוא יעבוד אצלו.</p>
+    <button class="btn primary wide" data-act="stay-as" data-code="${code}">${icon('check')} להמשיך בתור ${esc(prev.name)}</button>
+    <button class="btn ghost wide" data-act="switch-as" data-code="${code}" data-from="${prevId}" data-to="${pid}">${icon('arrow-left-right')} לעבור במכשיר הזה ל${esc(g.name)}</button>
+    <p class="hint">המעבר משנה רק את המכשיר הזה. ${keepsHistory ? `ההוצאות של ${esc(prev.name)} נשארות שלו, ואפשר לחזור אליו דרך הקישור האישי שלו.` : 'שום הוצאה לא משתנה.'}</p>
+  </section>`;
+}
+async function switchIdentity(code, from, to) {
+  let w = null;
+  try { w = await store.fetch(code); } catch { /* handled below */ }
+  const prev = w?.members?.[from], g = w?.members?.[to];
+  if (!g) { toast('החבר לא נמצא בארנק', 'err'); return go(`#/w/${code}`); }
+  try {
+    await store.setMember(code, to, { links: [...new Set([...linksOf(g), me.uid])], pending: false, claimedAt: Date.now() });
+    if (prev && from === me.uid) {
+      // An own membership with no expenses is just a leftover from joining by code.
+      if (!usedBy(w, from)) await store.delMember(code, from);
+    } else if (prev) {
+      await store.setMember(code, from, { links: linksOf(prev).filter(u => u !== me.uid), linked: null });
+    }
+  } catch { toast('המעבר נכשל. כדאי לנסות שוב', 'err'); return go(`#/w/${code}`); }
+  toast(`במכשיר הזה את/ה עכשיו ${g.name}`);
+  go(`#/w/${code}`);
 }
 function profileSheet() {
   const dark = document.documentElement.dataset.theme === 'dark' || (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches);
@@ -795,6 +804,8 @@ const acts = {
   'add-x': () => expenseSheet(), settle: el => settleSheet(el.dataset.from ? { from: el.dataset.from, to: el.dataset.to, amt: el.dataset.amt } : {}),
   tx: el => txSheet(el.dataset.id),
   'add-member': addMemberSheet,
+  'stay-as': el => go(`#/w/${el.dataset.code}`),
+  'switch-as': el => switchIdentity(el.dataset.code, el.dataset.from, el.dataset.to),
   'my-name': myNameSheet,
   invite: el => inviteSheet(el.dataset.id),
   'copy-invite': el => copyText($('.link-box bdi')?.textContent || linkOfMember(el.dataset.id), 'הקישור האישי הועתק'),
