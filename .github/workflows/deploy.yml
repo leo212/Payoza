@@ -1,8 +1,9 @@
 name: Deploy to Firebase
+# Publishes https://payzo-f14a3.web.app whenever changes land on main (e.g. a merged pull request).
 
 on:
   push:
-    branches: [ccr-a0a0b3fa-qsawpu]
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
