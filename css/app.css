@@ -220,8 +220,10 @@ label, .label { font-size: 13px; font-weight: 600; color: var(--muted); margin-t
 .row-btn > span { flex: 1; } .row-btn small { color: var(--muted); font-weight: 400; } .row-btn > .ic:first-child { color: var(--muted); } .row-btn.danger, .row-btn.danger > .ic:first-child { color: var(--neg); }
 .block > .row-btn:first-of-type { border-top: 0; }
 
-.crew li.pending { cursor: pointer; border-radius: 16px; margin: -6px; padding: 6px; transition: background .2s; }
-.crew li.pending:hover { background: var(--surface-2); }
+.crew li.tappable { cursor: pointer; border-radius: 16px; margin: -6px; padding: 6px; transition: background .2s; }
+.crew li.tappable:hover { background: var(--surface-2); }
+.crew em .ic { width: 11px; height: 11px; vertical-align: -1px; }
+.detail-hero p .ic { width: 15px; height: 15px; vertical-align: -2px; }
 .crew li.pending .av { opacity: .65; outline: 2px dashed var(--c); outline-offset: 2px; }
 em.wait { display: inline-flex; align-items: center; gap: 3px; background: color-mix(in srgb, var(--sun) 20%, transparent); color: var(--ink); }
 em.wait .ic { width: 11px; height: 11px; }

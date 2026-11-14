@@ -94,9 +94,11 @@ function saveMe(remote = true) {
 }
 
 /* ───────── state ───────── */
-// In a wallet the user is either their own member (keyed by uid) or an invited
-// member they claimed, which carries `linked: <uid>`.
-const myIdIn = members => Object.keys(members || {}).find(k => members[k]?.linked === me.uid) || me.uid;
+// In a wallet the user is either their own member (keyed by uid) or a member they
+// joined through its personal link; such a member lists every joined device in
+// `links` (older data: a single `linked`). Several devices can share one member.
+const linksOf = m => [...new Set([...(m?.links || []), ...(m?.linked ? [m.linked] : [])])];
+const myIdIn = members => Object.keys(members || {}).find(k => linksOf(members[k]).includes(me.uid)) || me.uid;
 const MY = () => S.my || me.uid;
 let store;
 const S = { route: { v: 'home' }, wallet: null, code: null, unsub: null, missing: false, sums: ls.get('pz_sums') || {} };
@@ -146,7 +148,7 @@ function subscribe(code) {
     S.wallet = { code, ...snap };
     S.my = myIdIn(snap.members);
     const m = snap.members[S.my];
-    if (!m || m.name !== me.name || m.color !== me.color) {
+    if (!m || (S.my === me.uid && (m.name !== me.name || m.color !== me.color))) {
       store.setMember(code, S.my, { name: me.name, color: me.color, joinedAt: m?.joinedAt || Date.now() }).catch(() => {});
     }
     if (!me.wallets.includes(code)) { me.wallets.unshift(code); saveMe(); }
@@ -407,15 +409,21 @@ function tabCrew(w, c, mem) {
       <div class="share-main"><small>קוד הצטרפות</small><button class="code" data-act="copy-code"><bdi>${showCode(w.code)}</bdi>${icon('copy')}</button>
         <div class="share-btns"><button class="btn primary small" data-act="share">${icon('share-2')} שיתוף קישור</button><button class="btn ghost small" data-act="copy-link">${icon('link')} העתקה</button></div></div>
     </section>
-    <section class="block"><div class="block-head"><h2>${mem.length} חברים בארנק</h2><button class="btn small ghost" data-act="add-member">${icon('user-plus')} הוספת חבר</button></div><ul class="crew">${mem.map((m, i) => `<li style="--i:${i}"${isPending(m) ? ` class="pending" data-act="invite" data-id="${m.uid}" role="button" tabindex="0"` : ''}>${avatar(m, 'lg')}<span class="crew-main"><b>${esc(m.name)}${m.uid === MY() ? '<em>אני</em>' : ''}${isPending(m) ? `<em class="wait">${icon('link')} טרם הצטרף/ה</em>` : ''}</b><small>שילם/ה ${money(c.paid[m.uid] || 0, base)} · חלק ${money(c.share[m.uid] || 0, base)}</small></span>${money(c.bal[m.uid] || 0, base, { sign: true, cls: (c.bal[m.uid] || 0) > 0.005 ? 'pos' : (c.bal[m.uid] || 0) < -0.005 ? 'neg' : '' })}</li>`).join('')}</ul></section>
+    <section class="block"><div class="block-head"><h2>${mem.length} חברים בארנק</h2><button class="btn small ghost" data-act="add-member">${icon('user-plus')} הוספת חבר</button></div><ul class="crew">${mem.map((m, i) => `<li style="--i:${i}" class="tappable${isPending(m) ? ' pending' : ''}" data-act="invite" data-id="${m.uid}" role="button" tabindex="0" aria-label="הקישור האישי של ${esc(m.name)}">${avatar(m, 'lg')}<span class="crew-main"><b>${esc(m.name)}${m.uid === MY() ? '<em>אני</em>' : ''}${isPending(m) ? `<em class="wait">${icon('link')} טרם הצטרף/ה</em>` : devicesOf(m.uid, m) > 1 ? `<em>${icon('smartphone')} ${devicesOf(m.uid, m)}</em>` : ''}</b><small>שילם/ה ${money(c.paid[m.uid] || 0, base)} · חלק ${money(c.share[m.uid] || 0, base)}</small></span>${money(c.bal[m.uid] || 0, base, { sign: true, cls: (c.bal[m.uid] || 0) > 0.005 ? 'pos' : (c.bal[m.uid] || 0) < -0.005 ? 'neg' : '' })}</li>`).join('')}</ul></section>
     <section class="block"><h2>הגדרות הארנק</h2>
       <button class="row-btn" data-act="rename">${icon('pencil')}<span>שם ואימוג׳י</span><small>${esc(w.meta.emoji || '')} ${esc(w.meta.name)}</small>${icon('chevron-left')}</button>
       <div class="row-btn static">${icon('globe')}<span>מטבע המאזן</span><small>${CUR[base]?.flag || ''} ${CUR[base]?.name || base}</small></div>
+      <button class="row-btn" data-act="invite" data-id="${MY()}">${icon('link')}<span>הקישור האישי שלי</span><small>לבן/בת זוג</small>${icon('chevron-left')}</button>
       <button class="row-btn danger" data-act="leave">${icon('log-out')}<span>הסרת הארנק מהרשימה שלי</span></button>
     </section>`;
 }
-const isPending = m => !!m.pending && !m.linked;
-const inviteLink = (code, pid) => EMBED ? (window.PZ_URL ? `${window.PZ_URL}#i-${code}-${pid}` : '') : `${location.origin}${location.pathname}#/i/${code}/${pid}`;
+const isPending = m => !!m.pending && !linksOf(m).length;
+// A personal link carries a member's token: invited members use their id, others
+// get a random `key` so the link never contains anyone's account id.
+const tokenOf = (pid, m) => (pid.startsWith('IN-') ? pid : m?.key);
+const inviteLink = (code, token) => !token ? '' : EMBED ? (window.PZ_URL ? `${window.PZ_URL}#i-${code}-${token}` : '') : `${location.origin}${location.pathname}#/i/${code}/${token}`;
+const linkOfMember = pid => inviteLink(S.wallet.code, tokenOf(pid, S.wallet.members[pid]));
+const devicesOf = (pid, m) => linksOf(m).length + (pid.startsWith('IN-') ? 0 : 1);
 const usedBy = (w, id) => Object.values(w.tx).some(t => t.payer === id || t.from === id || t.to === id || (t.shares && id in t.shares));
 const shareLink = code => EMBED ? (window.PZ_URL ? `${window.PZ_URL}#j-${code}` : showCode(code)) : `${location.origin}${location.pathname}#/j/${code}`;
 function qrSvg(text) {
@@ -590,48 +598,64 @@ function addMemberSheet() {
     <button class="btn primary wide">${icon('user-plus')} הוספה</button></form>`);
   setTimeout(() => $('#am-name')?.focus(), 350);
 }
-function inviteSheet(pid) {
+async function inviteSheet(pid) {
   const w = S.wallet, m = w.members[pid];
   if (!m) return;
-  const link = inviteLink(w.code, pid);
+  let token = tokenOf(pid, m);
+  if (!token) {
+    token = 'K-' + rand(12);
+    try { await store.setMember(w.code, pid, { key: token }); } catch { return toast('לא הצלחנו ליצור קישור. כדאי לנסות שוב', 'err'); }
+  }
+  const mine = pid === MY(), link = inviteLink(w.code, token), n = devicesOf(pid, S.wallet.members[pid] || m);
+  const who = esc(m.name);
+  const hint = mine
+    ? `מי שפותח את הקישור נכנס לארנק בתור ${who}: רואה את אותו מאזן ויכול להוסיף ולערוך הוצאות. מתאים לבן או בת הזוג שאיתך בטיול.`
+    : isPending(m)
+      ? `מי שפותח את הקישור נכנס ישר לארנק בתור ${who}, בלי הרשמה. אם כבר יש לו חשבון Payoza, הארנק יתווסף לחשבון הקיים.`
+      : `מי שפותח את הקישור נכנס לארנק בתור ${who} ומשתף איתו את אותו מאזן, למשל בן או בת הזוג.`;
   openSheet(`<div class="form">
-    <div class="detail-hero">${avatar(m, 'xl')}<h2>הקישור האישי של ${esc(m.name)}</h2></div>
+    <div class="detail-hero">${avatar(m, 'xl')}<h2>${mine ? 'הקישור האישי שלי' : `הקישור האישי של ${who}`}</h2>
+      ${n > 0 ? `<p>${icon('smartphone')} מחובר/ת ${n === 1 ? 'במכשיר אחד' : `ב־${n} מכשירים`}</p>` : ''}</div>
     ${link ? `<div class="invite-qr">${qrSvg(link)}</div>
-    <p class="hint">מי שפותח את הקישור נכנס ישר לארנק בתור ${esc(m.name)}, בלי הרשמה. אם כבר יש לו חשבון Payoza, הארנק יתווסף לחשבון הקיים. כדאי לשלוח רק לו: הקישור פותח את החשבון שלו.</p>
+    <p class="hint">${hint} הקישור נותן גישה מלאה לחלק של ${who} בארנק, אז כדאי לשלוח אותו רק למי שצריך.</p>
     <button type="button" class="uid link-box" data-act="copy-invite" data-id="${pid}"><bdi>${esc(link)}</bdi>${icon('copy')}</button>
     <div class="grid2"><button class="btn primary" data-act="share-invite" data-id="${pid}">${icon('share-2')} שליחה</button><button class="btn ghost" data-act="copy-invite" data-id="${pid}">${icon('link')} העתקה</button></div>`
     : `<p class="hint">קישורים אישיים פעילים בגרסת האתר של Payoza.</p>`}
-    ${usedBy(w, pid) ? '' : `<button type="button" class="row-btn danger" data-act="del-member" data-id="${pid}">${icon('trash-2')}<span>הסרת ${esc(m.name)} מהארנק</span></button>`}
+    ${isPending(m) && !usedBy(w, pid) ? `<button type="button" class="row-btn danger" data-act="del-member" data-id="${pid}">${icon('trash-2')}<span>הסרת ${who} מהארנק</span></button>` : ''}
   </div>`);
 }
-async function acceptInvite(code, pid) {
+async function acceptInvite(code, token) {
   app.className = '';
   app.innerHTML = `<div class="center-msg"><div class="spinner"></div><p>מחברים אותך לארנק…</p></div>`;
   let w = null;
   try { w = await store.fetch(code); } catch { /* handled below */ }
-  const g = w?.members?.[pid];
+  const members = w?.members || {};
+  const pid = token.startsWith('IN-') && members[token] ? token : Object.keys(members).find(k => members[k].key === token);
+  const g = pid && members[pid];
   if (!g) { toast('הקישור האישי לא תקין, או שהחבר הוסר מהארנק', 'err'); return go('#/'); }
-  if (g.linked && g.linked !== me.uid) {
-    toast('הקישור הזה כבר שויך לחשבון אחר. אפשר להצטרף לארנק כחבר חדש', 'err');
-    return go(`#/j/${code}`);
-  }
   const fresh = !me.name;
   if (fresh) { me.name = g.name; me.color = g.color || me.color; }
-  // An open wallet view would re-add the old membership while we move it.
-  unsubscribe();
-  try {
-    const prevId = myIdIn(w.members);
-    // Link first, so every view resolves this user to the invited member from now on.
-    await store.setMember(code, pid, { name: me.name, color: me.color, linked: me.uid, pending: false, claimedAt: Date.now() });
-    // Already in this wallet under another identity: move that history onto the invited member.
-    if (w.members[prevId] && prevId !== pid) {
-      for (const [id, t] of Object.entries(w.tx)) { const t2 = repoint(t, prevId, pid); if (t2) await store.setTx(code, id, t2); }
-      await store.delMember(code, prevId);
-    }
-  } catch { toast('החיבור נכשל. כדאי לפתוח את הקישור שוב', 'err'); return go('#/'); }
+  const prevId = myIdIn(members);
+  if (prevId !== pid && pid !== me.uid) {
+    // An open wallet view would re-add the old membership while we move it.
+    unsubscribe();
+    try {
+      // Link first, so every view resolves this device to the shared member from now on.
+      await store.setMember(code, pid, { links: [...linksOf(g), me.uid], pending: false, claimedAt: Date.now() });
+      const prev = members[prevId];
+      if (prevId === me.uid && prev) {
+        // This device had its own membership here: move its history onto the shared member.
+        for (const [id, t] of Object.entries(w.tx)) { const t2 = repoint(t, prevId, pid); if (t2) await store.setTx(code, id, t2); }
+        await store.delMember(code, prevId);
+      } else if (prev) {
+        // It was joined to another member through a link: just leave that one.
+        await store.setMember(code, prevId, { links: linksOf(prev).filter(u => u !== me.uid), linked: null });
+      }
+    } catch { toast('החיבור נכשל. כדאי לפתוח את הקישור שוב', 'err'); return go('#/'); }
+  }
   if (!me.wallets.includes(code)) me.wallets.unshift(code);
   saveMe();
-  toast(fresh ? `ברוך הבא, ${me.name}! החשבון שלך מוכן` : `${w.meta.name} נוסף לחשבון שלך`);
+  toast(fresh ? `ברוך הבא! נכנסת לארנק בתור ${g.name}` : `${w.meta.name}: נכנסת בתור ${g.name}`);
   go(`#/w/${code}`);
 }
 function repoint(t, from, to) {
@@ -684,10 +708,11 @@ const acts = {
   tx: el => txSheet(el.dataset.id),
   'add-member': addMemberSheet,
   invite: el => inviteSheet(el.dataset.id),
-  'copy-invite': el => copyText(inviteLink(S.wallet.code, el.dataset.id), 'הקישור האישי הועתק'),
+  'copy-invite': el => copyText($('.link-box bdi')?.textContent || linkOfMember(el.dataset.id), 'הקישור האישי הועתק'),
   'share-invite': async el => {
-    const w = S.wallet, m = w.members[el.dataset.id], url = inviteLink(w.code, el.dataset.id);
-    if (navigator.share) { try { await navigator.share({ title: 'Payoza', text: `${m.name}, הוספתי אותך לארנק "${w.meta.name}" ב-Payoza. הקישור האישי שלך:`, url }); return; } catch (e) { if (e?.name === 'AbortError') return; } }
+    const w = S.wallet, id = el.dataset.id, m = w.members[id], url = $('.link-box bdi')?.textContent || linkOfMember(id);
+    const text = id === MY() ? `הצטרפו אליי לארנק "${w.meta.name}" ב-Payoza, בתור ${m.name}:` : `${m.name}, הוספתי אותך לארנק "${w.meta.name}" ב-Payoza. הקישור האישי שלך:`;
+    if (navigator.share) { try { await navigator.share({ title: 'Payoza', text, url }); return; } catch (e) { if (e?.name === 'AbortError') return; } }
     copyText(url, 'הקישור האישי הועתק');
   },
   'del-member': async el => {
@@ -780,7 +805,7 @@ const forms = {
     if (!name) return;
     me.name = name; me.color = $('.dot.on', f)?.dataset.c || me.color;
     saveMe(); closeSheet(); toast('הפרופיל עודכן');
-    if (S.wallet) store.setMember(S.wallet.code, MY(), { name: me.name, color: me.color }).catch(() => {});
+    if (S.wallet && MY() === me.uid) store.setMember(S.wallet.code, me.uid, { name: me.name, color: me.color }).catch(() => {});
     render(false);
   },
   restore: async f => {
