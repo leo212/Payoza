@@ -1,5 +1,5 @@
 import { icon } from './icons.js';
-import { CATS, CAT, CURS, CUR, COLORS, WALLET_EMOJI } from './data.js';
+import { CATS, CAT, CURS, CUR, COLORS, WALLET_EMOJI, WALLET_EXAMPLES } from './data.js';
 import { createStore } from './store.js';
 import { firebaseConfig, canonicalHost } from './config.js';
 
@@ -579,9 +579,12 @@ function txSheet(id) {
 
 function walletSheet(edit) {
   const m = edit ? S.wallet.meta : { name: '', emoji: WALLET_EMOJI[0], base: 'ILS' };
+  const n = ls.get('pz_example', Math.floor(Math.random() * WALLET_EXAMPLES.length));
+  if (!edit) ls.set('pz_example', n + 1);
+  const example = WALLET_EXAMPLES[n % WALLET_EXAMPLES.length];
   openSheet(`<form class="form" data-form="wallet" data-edit="${edit ? 1 : 0}" data-emoji="${esc(m.emoji)}">
     <h2>${edit ? 'עריכת הארנק' : 'ארנק חדש'}</h2>
-    <label for="nw-name">שם הארנק</label><input id="nw-name" class="in big" maxlength="32" placeholder="למשל: הדירה ברחוב הרצל, ועד הבית" value="${esc(m.name)}" required>
+    <label for="nw-name">שם הארנק</label><input id="nw-name" class="in big" maxlength="32" placeholder="למשל: ${esc(example)}" value="${esc(m.name)}" required>
     ${edit ? '' : `<label for="nw-me">השם שלך בארנק הזה</label><input id="nw-me" class="in" maxlength="32" value="${esc(me.name)}" required><p class="hint">כך יראו אותך השותפים בארנק הזה, למשל "יעל וליאור" או "דירה 5".</p>`}
     <div class="label">אימוג׳י</div>
     <div class="emoji-grid">${WALLET_EMOJI.map(e => `<button type="button" class="emoji${e === m.emoji ? ' on' : ''}" data-act="emoji" data-e="${e}">${e}</button>`).join('')}</div>

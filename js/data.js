@@ -68,4 +68,10 @@ export const CURS = C.map(([code, sym, name, flag, usd]) => ({ code, sym, name, 
 export const CUR = Object.fromEntries(CURS.map(c => [c.code, c]));
 
 export const COLORS = ['#0FB5A6', '#FF6A4D', '#FFB020', '#6C5CE7', '#2D9CDB', '#E84393', '#27AE60', '#F2784B', '#8E6CEF', '#00B8D9'];
+// Example wallet names, shown in turn as the placeholder when creating a wallet.
+export const WALLET_EXAMPLES = [
+  'סופ״ש בצפון', 'חופשה באירופה', 'דירת שותפים', 'מתנה ליום הולדת של דנה', 'ועד הבית',
+  'טיול לאילת', 'מסיבת סוף שנה', 'הוצאות הבית', 'ערב פוקר שבועי', 'נופש משפחתי',
+  'קבוצת כדורגל', 'מסיבת רווקות', 'אירוח חג', 'שכירות וחשבונות',
+];
 export const WALLET_EMOJI = ['👛', '🏠', '🏢', '👨‍👩‍👧', '💑', '🎉', '🍕', '🛒', '⚽', '🎓', '💼', '🏝️', '🏔️', '🏕️', '✈️', '🌍'];
