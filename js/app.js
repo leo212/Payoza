@@ -472,8 +472,11 @@ function expenseSheet(tx) {
     <div class="rate-row" id="xf-rate-row"${F.cur === base ? ' hidden' : ''}>
       <span>שער <span id="xf-rate-name">${CUR[F.cur].name}</span>: <bdi>1 <b id="xf-rate-cur">${F.cur}</b> =</bdi></span><input id="xf-rate" class="in mini" inputmode="decimal" value="${rate}" dir="ltr" aria-label="שער המרה"><span>${CUR[base].sym}</span><span class="rate-eq" id="xf-rate-eq"></span>
     </div>
-    <div class="label">קטגוריה</div>
-    <div class="cat-grid" id="xf-cats">${CATS.map(c => `<button type="button" class="cat-btn${c.id === F.cat ? ' on' : ''}" data-act="cat" data-cat="${c.id}" style="--h:${c.hue}"><span class="cat">${icon(c.icon)}</span><span>${c.name}</span></button>`).join('')}</div>
+    <div class="label split-head"><label for="xf-cat-q" class="bare">קטגוריה</label>
+      <span class="cat-search">${icon('search')}<input id="xf-cat-q" type="search" placeholder="חיפוש לפי שם" autocomplete="off" enterkeyhint="done"></span></div>
+    <div class="cat-grid" id="xf-cats">${CATS.map(c => `<button type="button" class="cat-btn${c.id === F.cat ? ' on' : ''}" data-act="cat" data-cat="${c.id}" data-name="${c.name}" style="--h:${c.hue}"><span class="cat">${icon(c.icon)}</span><span>${c.name}</span></button>`).join('')}</div>
+    <p class="hint cat-none" id="xf-cat-none" hidden>לא נמצאה קטגוריה בשם הזה. אפשר לבחור "אחר".</p>
+    <div class="scroller" id="xf-cat-bar" aria-hidden="true"><i></i></div>
     <div class="grid2">
       <div><label for="xf-note">על מה?</label><input id="xf-note" class="in" maxlength="60" placeholder="למשל: ארוחת ערב בנמל" value="${esc(tx?.note || '')}"></div>
       <div><label for="xf-date">מתי?</label><input id="xf-date" class="in" type="date" value="${tx?.date || today()}" max="2100-01-01"></div>
@@ -487,7 +490,46 @@ function expenseSheet(tx) {
     <button class="btn primary wide">${icon('check')} ${tx ? 'שמירת השינויים' : 'הוספת ההוצאה'}</button>
   </form>`, 'tall');
   refreshSplit();
+  initCatScroller();
   if (!tx) setTimeout(() => $('#xf-amt')?.focus(), 350);
+}
+// Category strip: a visible scrollbar (phones hide native ones) and a name filter.
+function initCatScroller() {
+  const grid = $('#xf-cats'), bar = $('#xf-cat-bar'), thumb = $('i', bar);
+  const sync = () => {
+    const max = grid.scrollWidth - grid.clientWidth;
+    bar.hidden = max < 4;
+    if (bar.hidden) return;
+    const track = bar.clientWidth, w = Math.max(36, track * grid.clientWidth / grid.scrollWidth);
+    const ratio = Math.min(1, Math.abs(grid.scrollLeft) / max); // RTL scrollLeft runs 0 → negative
+    thumb.style.width = w + 'px';
+    thumb.style.transform = `translateX(${-ratio * (track - w)}px)`;
+  };
+  grid.addEventListener('scroll', sync, { passive: true });
+  // Drag the thumb, or press the track to jump there.
+  bar.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    const move = ev => {
+      const r = bar.getBoundingClientRect(), w = thumb.offsetWidth;
+      const ratio = Math.min(1, Math.max(0, (r.right - ev.clientX - w / 2) / (r.width - w)));
+      grid.scrollLeft = -ratio * (grid.scrollWidth - grid.clientWidth);
+    };
+    move(e);
+    bar.setPointerCapture(e.pointerId);
+    bar.onpointermove = move;
+    bar.onpointerup = bar.onpointercancel = () => { bar.onpointermove = null; };
+  });
+  grid.sync = sync;
+  requestAnimationFrame(() => { $('.cat-btn.on', grid)?.scrollIntoView({ block: 'nearest', inline: 'center' }); sync(); });
+}
+function filterCats(q) {
+  const grid = $('#xf-cats');
+  q = q.trim();
+  let shown = 0;
+  $$('.cat-btn', grid).forEach(b => { const hit = !q || b.dataset.name.includes(q); b.hidden = !hit; shown += hit; });
+  $('#xf-cat-none').hidden = shown > 0;
+  grid.scrollLeft = 0;
+  grid.sync?.();
 }
 function refreshSplit() {
   if (!F || !$('#xf-split')) return;
@@ -783,6 +825,8 @@ document.addEventListener('click', e => {
   if (fn) { if (el.tagName !== 'A') e.preventDefault(); fn(el, e); }
 });
 document.addEventListener('keydown', e => {
+  // Enter in the category search picks the first match instead of submitting the expense.
+  if (e.key === 'Enter' && e.target.id === 'xf-cat-q') { e.preventDefault(); $('#xf-cats .cat-btn:not([hidden])')?.click(); e.target.blur(); return; }
   if (e.key === 'Escape') closeSheet();
   if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('li[data-act]')) { e.preventDefault(); e.target.click(); }
 });
@@ -790,6 +834,7 @@ document.addEventListener('keydown', e => {
 document.addEventListener('input', e => {
   const id = e.target.id;
   if (id === 'xf-amt' || id === 'xf-rate') refreshSplit();
+  if (id === 'xf-cat-q') filterCats(e.target.value);
   if (id === 'rs-uid' || id === 'jn-code') e.target.value = e.target.value.toUpperCase();
 });
 document.addEventListener('change', e => {

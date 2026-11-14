@@ -23,7 +23,7 @@ export const CATS = [
   { id: 'wine', name: 'יין ויקבים', icon: 'wine', hue: 340 },
   { id: 'train', name: 'רכבת ואוטובוס', icon: 'train-front', hue: 188 },
   { id: 'taxi', name: 'מונית', icon: 'car-taxi-front', hue: 50 },
-  { id: 'car', name: 'רכב שכור', icon: 'car', hue: 222 },
+  { id: 'car', name: 'רכב', icon: 'car', hue: 222 },
   { id: 'fuel', name: 'דלק', icon: 'fuel', hue: 0 },
   { id: 'parking', name: 'חניה ואגרות', icon: 'circle-parking', hue: 232 },
   { id: 'boat', name: 'שיט ומעבורת', icon: 'ship', hue: 196 },
