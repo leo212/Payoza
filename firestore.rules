@@ -13,6 +13,10 @@ service cloud.firestore {
       match /{sub}/{id} {
         allow read, write: if sub in ['members', 'tx'];
       }
+      // Activity log: append-only, so a deletion or edit always leaves a record.
+      match /log/{id} {
+        allow read, create: if true;
+      }
     }
   }
 }
