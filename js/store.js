@@ -4,6 +4,7 @@
 //   setMember(code, uid, data) / setTx(code, id, data) / delTx(code, id)
 //   fetch(code) -> {meta, members, tx} | null
 //   watch(code, cb) -> unsubscribe
+//   delMember(code, uid)
 // Layout: users/{uid}, wallets/{code}, wallets/{code}/members/{uid}, wallets/{code}/tx/{id}
 
 const FB = '10.12.2';
@@ -37,6 +38,7 @@ async function firebaseStore(config) {
     createWallet: (code, meta) => setDoc(doc(db, 'wallets', code), meta),
     updateWallet: (code, patch) => setDoc(doc(db, 'wallets', code), patch, { merge: true }),
     setMember: (code, uid, data) => setDoc(doc(db, 'wallets', code, 'members', uid), data, { merge: true }),
+    delMember: (code, uid) => deleteDoc(doc(db, 'wallets', code, 'members', uid)),
     setTx: (code, id, data) => setDoc(doc(db, 'wallets', code, 'tx', id), data),
     delTx: (code, id) => deleteDoc(doc(db, 'wallets', code, 'tx', id)),
     async fetch(code) {
@@ -84,6 +86,7 @@ function localStore() {
     async createWallet(code, meta) { db.wallets[code] = { meta, members: {}, tx: {} }; save(code); },
     async updateWallet(code, patch) { Object.assign(W(code).meta, patch); save(code); },
     async setMember(code, uid, data) { W(code).members[uid] = { ...W(code).members[uid], ...data }; save(code); },
+    async delMember(code, uid) { delete W(code).members[uid]; save(code); },
     async setTx(code, id, data) { W(code).tx[id] = data; save(code); },
     async delTx(code, id) { delete W(code).tx[id]; save(code); },
     async fetch(code) { return snap(code); },
@@ -110,6 +113,7 @@ function claudeStore(db) {
     createWallet: (code, meta) => W(code).set(meta),
     updateWallet: (code, patch) => merge(W(code), patch),
     setMember: (code, uid, d) => merge(W(code).collection('members').doc(uid), d),
+    delMember: (code, uid) => W(code).collection('members').doc(uid).delete(),
     setTx: (code, id, d) => W(code).collection('tx').doc(id).set(d),
     delTx: (code, id) => W(code).collection('tx').doc(id).delete(),
     async fetch(code) {

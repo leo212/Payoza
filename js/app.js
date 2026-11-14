@@ -94,6 +94,10 @@ function saveMe(remote = true) {
 }
 
 /* ───────── state ───────── */
+// In a wallet the user is either their own member (keyed by uid) or an invited
+// member they claimed, which carries `linked: <uid>`.
+const myIdIn = members => Object.keys(members || {}).find(k => members[k]?.linked === me.uid) || me.uid;
+const MY = () => S.my || me.uid;
 let store;
 const S = { route: { v: 'home' }, wallet: null, code: null, unsub: null, missing: false, sums: ls.get('pz_sums') || {} };
 const app = $('#app');
@@ -105,6 +109,7 @@ function parseRoute() {
   const p = curHash.replace(/^#\/?/, '').split('/');
   if (p[0] === 'w' && p[1]) return { v: 'wallet', code: cleanCode(p[1]), tab: ['home', 'tx', 'settle', 'crew'].includes(p[2]) ? p[2] : 'home' };
   if (p[0] === 'j' && p[1]) return { v: 'join', code: cleanCode(p[1]) };
+  if (p[0] === 'i' && p[1] && p[2]) return { v: 'invite', code: cleanCode(p[1]), pid: p[2].replace(/[^A-Za-z0-9-]/g, '') };
   return { v: 'home' };
 }
 const go = h => {
@@ -116,6 +121,7 @@ function onRoute() {
   const r = parseRoute();
   const prev = S.route;
   S.route = r;
+  if (r.v === 'invite') return acceptInvite(r.code, r.pid);
   if (!me.name) return render(true);
   if (r.v === 'join') return joinWallet(r.code);
   if (r.v === 'wallet') {
@@ -129,7 +135,7 @@ function onRoute() {
   render(true);
   refreshHome();
 }
-function unsubscribe() { S.unsub?.(); S.unsub = null; S.code = null; S.wallet = null; S.missing = false; }
+function unsubscribe() { S.unsub?.(); S.unsub = null; S.code = null; S.wallet = null; S.my = null; S.missing = false; }
 function subscribe(code) {
   unsubscribe();
   S.code = code;
@@ -138,9 +144,10 @@ function subscribe(code) {
     if (S.code !== code) return;
     if (!snap) { S.missing = true; S.wallet = null; return render(true); }
     S.wallet = { code, ...snap };
-    const m = snap.members[me.uid];
+    S.my = myIdIn(snap.members);
+    const m = snap.members[S.my];
     if (!m || m.name !== me.name || m.color !== me.color) {
-      store.setMember(code, me.uid, { name: me.name, color: me.color, joinedAt: m?.joinedAt || Date.now() }).catch(() => {});
+      store.setMember(code, S.my, { name: me.name, color: me.color, joinedAt: m?.joinedAt || Date.now() }).catch(() => {});
     }
     if (!me.wallets.includes(code)) { me.wallets.unshift(code); saveMe(); }
     saveSum(S.wallet);
@@ -149,7 +156,7 @@ function subscribe(code) {
 }
 function saveSum(w) {
   const c = compute(w);
-  S.sums[w.code] = { name: w.meta.name, emoji: w.meta.emoji, base: w.meta.base, n: Object.keys(w.members).length, bal: c.bal[me.uid] || 0, total: c.total };
+  S.sums[w.code] = { name: w.meta.name, emoji: w.meta.emoji, base: w.meta.base, n: Object.keys(w.members).length, bal: c.bal[myIdIn(w.members)] || 0, total: c.total };
   ls.set('pz_sums', S.sums);
 }
 async function refreshHome() {
@@ -306,11 +313,11 @@ function viewWallet() {
 }
 
 function tabHome(w, c, mem) {
-  const base = w.meta.base, my = c.bal[me.uid] || 0, flat = Math.abs(my) < 0.005;
+  const base = w.meta.base, my = c.bal[MY()] || 0, flat = Math.abs(my) < 0.005;
   const max = Math.max(1, ...mem.map(m => Math.abs(c.bal[m.uid] || 0)));
   const bars = mem.map((m, i) => {
     const b = c.bal[m.uid] || 0, pct = Math.abs(b) / max * 100;
-    return `<li class="bal" style="--i:${i}">${avatar(m)}<span class="bal-name">${esc(m.name)}${m.uid === me.uid ? '<em>אני</em>' : ''}</span>
+    return `<li class="bal" style="--i:${i}">${avatar(m)}<span class="bal-name">${esc(m.name)}${m.uid === MY() ? '<em>אני</em>' : ''}</span>
       <span class="bal-bar ${b >= 0 ? 'pos' : 'neg'}"><i style="--w:${pct.toFixed(1)}%"></i></span>
       ${money(b, base, { sign: true, cls: Math.abs(b) < 0.005 ? '' : b > 0 ? 'pos' : 'neg' })}</li>`;
   }).join('');
@@ -324,8 +331,8 @@ function tabHome(w, c, mem) {
       <div class="pass-route" aria-hidden="true"><i></i>${icon('plane')}<i></i></div>
       <dl class="pass-stats">
         <div><dt>סה״כ בטיול</dt><dd>${counted(c.total, base)}</dd></div>
-        <div><dt>החלק שלי</dt><dd>${counted(c.share[me.uid] || 0, base)}</dd></div>
-        <div><dt>שילמתי</dt><dd>${counted(c.paid[me.uid] || 0, base)}</dd></div>
+        <div><dt>החלק שלי</dt><dd>${counted(c.share[MY()] || 0, base)}</dd></div>
+        <div><dt>שילמתי</dt><dd>${counted(c.paid[MY()] || 0, base)}</dd></div>
       </dl>
     </section>
     ${empty ? `<div class="empty"><div class="empty-art">${icon('receipt')}</div><b>עוד אין הוצאות</b><p>מתעדים את ההוצאה הראשונה, והמאזן מתעדכן לכולם.</p><button class="btn primary" data-act="add-x">${icon('plus')} הוצאה ראשונה</button>${mem.length < 2 ? `<button class="btn ghost" data-act="share">${icon('user-plus')} הזמנת חברים</button>` : ''}</div>` : `
@@ -357,9 +364,9 @@ function txRow(t, w, i = 0) {
       <span class="tx-main"><b>${esc(M[t.from]?.name || '?')} ← ${esc(M[t.to]?.name || '?')}</b><small>העברת תשלום${t.note ? ' · ' + esc(t.note) : ''}</small></span>
       <span class="tx-amt">${money(t.amount, t.cur)}<small>התחשבנות</small></span></button>`;
   }
-  const mine = sharesOf(t.amount * (t.rate || 1), t.shares || {})[me.uid];
+  const mine = sharesOf(t.amount * (t.rate || 1), t.shares || {})[MY()];
   return `<button class="tx" data-act="tx" data-id="${t.id}" style="--i:${i}">${catTile(t.cat)}
-    <span class="tx-main"><b>${esc(t.note || (CAT[t.cat] || CAT.other).name)}</b><small>${avatar(M[t.payer], 'xs')} ${t.payer === me.uid ? 'שילמתי' : 'שולם ע״י ' + esc(M[t.payer]?.name || '?')}</small></span>
+    <span class="tx-main"><b>${esc(t.note || (CAT[t.cat] || CAT.other).name)}</b><small>${avatar(M[t.payer], 'xs')} ${t.payer === MY() ? 'שילמתי' : 'שולם ע״י ' + esc(M[t.payer]?.name || '?')}</small></span>
     <span class="tx-amt">${money(t.amount, t.cur)}<small>${mine ? 'חלקך ' + money(mine, base) : 'בלי חלקך'}</small></span></button>`;
 }
 
@@ -379,7 +386,7 @@ function tabSettle(w, c, mem) {
   const base = w.meta.base, M = w.members;
   const hist = txList(w).filter(t => t.type === 's');
   const sug = c.transfers.map((t, i) => {
-    const mine = t.from === me.uid || t.to === me.uid;
+    const mine = t.from === MY() || t.to === MY();
     return `<li class="owe${mine ? ' mine' : ''}" style="--i:${i}">
       <div class="owe-flow">${avatar(M[t.from], 'lg')}<span class="owe-line"><i></i>${money(t.amount, base)}${icon('arrow-left')}</span>${avatar(M[t.to], 'lg')}</div>
       <p><b>${esc(M[t.from]?.name || '?')}</b> מעביר/ה אל <b>${esc(M[t.to]?.name || '?')}</b></p>
@@ -400,13 +407,16 @@ function tabCrew(w, c, mem) {
       <div class="share-main"><small>קוד הצטרפות</small><button class="code" data-act="copy-code"><bdi>${showCode(w.code)}</bdi>${icon('copy')}</button>
         <div class="share-btns"><button class="btn primary small" data-act="share">${icon('share-2')} שיתוף קישור</button><button class="btn ghost small" data-act="copy-link">${icon('link')} העתקה</button></div></div>
     </section>
-    <section class="block"><h2>${mem.length} חברים בארנק</h2><ul class="crew">${mem.map((m, i) => `<li style="--i:${i}">${avatar(m, 'lg')}<span class="crew-main"><b>${esc(m.name)}${m.uid === me.uid ? '<em>אני</em>' : ''}</b><small>שילם/ה ${money(c.paid[m.uid] || 0, base)} · חלק ${money(c.share[m.uid] || 0, base)}</small></span>${money(c.bal[m.uid] || 0, base, { sign: true, cls: (c.bal[m.uid] || 0) > 0.005 ? 'pos' : (c.bal[m.uid] || 0) < -0.005 ? 'neg' : '' })}</li>`).join('')}</ul></section>
+    <section class="block"><div class="block-head"><h2>${mem.length} חברים בארנק</h2><button class="btn small ghost" data-act="add-member">${icon('user-plus')} הוספת חבר</button></div><ul class="crew">${mem.map((m, i) => `<li style="--i:${i}"${isPending(m) ? ` class="pending" data-act="invite" data-id="${m.uid}" role="button" tabindex="0"` : ''}>${avatar(m, 'lg')}<span class="crew-main"><b>${esc(m.name)}${m.uid === MY() ? '<em>אני</em>' : ''}${isPending(m) ? `<em class="wait">${icon('link')} טרם הצטרף/ה</em>` : ''}</b><small>שילם/ה ${money(c.paid[m.uid] || 0, base)} · חלק ${money(c.share[m.uid] || 0, base)}</small></span>${money(c.bal[m.uid] || 0, base, { sign: true, cls: (c.bal[m.uid] || 0) > 0.005 ? 'pos' : (c.bal[m.uid] || 0) < -0.005 ? 'neg' : '' })}</li>`).join('')}</ul></section>
     <section class="block"><h2>הגדרות הארנק</h2>
       <button class="row-btn" data-act="rename">${icon('pencil')}<span>שם ואימוג׳י</span><small>${esc(w.meta.emoji || '')} ${esc(w.meta.name)}</small>${icon('chevron-left')}</button>
       <div class="row-btn static">${icon('globe')}<span>מטבע המאזן</span><small>${CUR[base]?.flag || ''} ${CUR[base]?.name || base}</small></div>
       <button class="row-btn danger" data-act="leave">${icon('log-out')}<span>הסרת הארנק מהרשימה שלי</span></button>
     </section>`;
 }
+const isPending = m => !!m.pending && !m.linked;
+const inviteLink = (code, pid) => EMBED ? (window.PZ_URL ? `${window.PZ_URL}#i-${code}-${pid}` : '') : `${location.origin}${location.pathname}#/i/${code}/${pid}`;
+const usedBy = (w, id) => Object.values(w.tx).some(t => t.payer === id || t.from === id || t.to === id || (t.shares && id in t.shares));
 const shareLink = code => EMBED ? (window.PZ_URL ? `${window.PZ_URL}#j-${code}` : showCode(code)) : `${location.origin}${location.pathname}#/j/${code}`;
 function qrSvg(text) {
   try {
@@ -442,7 +452,7 @@ function expenseSheet(tx) {
   const w = S.wallet, mem = membersOf(w), base = w.meta.base;
   const lastCur = ls.get('pz_cur_' + w.code) || base;
   F = tx ? { id: tx.id, cur: tx.cur, cat: tx.cat, payer: tx.payer, weights: Object.fromEntries(mem.map(m => [m.uid, tx.shares?.[m.uid] || 0])), ts: tx.ts }
-    : { id: null, cur: lastCur, cat: 'food', payer: me.uid, weights: Object.fromEntries(mem.map(m => [m.uid, 1])) };
+    : { id: null, cur: lastCur, cat: 'food', payer: MY(), weights: Object.fromEntries(mem.map(m => [m.uid, 1])) };
   const rate = tx ? tx.rate : tidyRate(rateOf(F.cur, base));
   openSheet(`<form class="form" data-form="expense" novalidate>
     <h2>${tx ? 'עריכת הוצאה' : 'הוצאה חדשה'}</h2>
@@ -493,7 +503,7 @@ async function submitExpense() {
   if (!(amount > 0)) return fail('צריך להזין סכום גדול מאפס.');
   if (!(rate > 0)) return fail('צריך להזין שער המרה תקין.');
   if (!Object.keys(shares).length) return fail('לפחות חבר אחד צריך להשתתף בהוצאה.');
-  const tx = { type: 'x', amount, cur: F.cur, rate, cat: F.cat, note: $('#xf-note').value.trim(), date: $('#xf-date').value || today(), payer: F.payer, shares, by: me.uid, ts: F.ts || Date.now() };
+  const tx = { type: 'x', amount, cur: F.cur, rate, cat: F.cat, note: $('#xf-note').value.trim(), date: $('#xf-date').value || today(), payer: F.payer, shares, by: MY(), ts: F.ts || Date.now() };
   ls.set('pz_cur_' + w.code, F.cur);
   const editing = !!F.id;
   closeSheet();
@@ -506,7 +516,7 @@ let G = null;
 function settleSheet(pre = {}) {
   const w = S.wallet, mem = membersOf(w), base = w.meta.base;
   if (mem.length < 2) return toast('צריך לפחות שני חברים בארנק', 'err');
-  const from = pre.from || me.uid, to = pre.to || mem.find(m => m.uid !== from).uid;
+  const from = pre.from || MY(), to = pre.to || mem.find(m => m.uid !== from).uid;
   G = { from, to, cur: base };
   openSheet(`<form class="form" data-form="settle" novalidate>
     <h2>תיעוד העברת תשלום</h2>
@@ -531,7 +541,7 @@ async function submitSettle() {
   if (!(amount > 0)) return fail('צריך להזין סכום גדול מאפס.');
   if (!(rate > 0)) return fail('צריך להזין שער המרה תקין.');
   if (G.from === G.to) return fail('המעביר והמקבל חייבים להיות אנשים שונים.');
-  const tx = { type: 's', amount, cur: G.cur, rate, from: G.from, to: G.to, note: $('#sf-note').value.trim(), date: $('#sf-date').value || today(), by: me.uid, ts: Date.now() };
+  const tx = { type: 's', amount, cur: G.cur, rate, from: G.from, to: G.to, note: $('#sf-note').value.trim(), date: $('#sf-date').value || today(), by: MY(), ts: Date.now() };
   closeSheet();
   try { await store.setTx(w.code, newId(), tx); toast('ההעברה תועדה'); confetti(); }
   catch { toast('השמירה נכשלה. כדאי לנסות שוב', 'err'); }
@@ -568,6 +578,71 @@ function walletSheet(edit) {
     ${edit ? '' : `<label for="nw-cur">מטבע המאזן</label><select id="nw-cur" class="in">${curOptions('ILS')}</select><p class="hint">הוצאות בכל מטבע יומרו למטבע הזה לצורך המאזן. אי אפשר לשנות אותו אחר כך.</p>`}
     <button class="btn primary wide">${icon('check')} ${edit ? 'שמירה' : 'יצירת הארנק'}</button></form>`);
   setTimeout(() => $('#nw-name')?.focus(), 350);
+}
+function addMemberSheet() {
+  const used = new Set(membersOf(S.wallet).map(m => m.color));
+  const color = COLORS.find(c => !used.has(c)) || COLORS[0];
+  openSheet(`<form class="form" data-form="add-member">
+    <h2>הוספת חבר לארנק</h2>
+    <p class="hint">אפשר לכלול אותו בהוצאות כבר עכשיו. אחר כך שולחים לו קישור אישי, ובלחיצה אחת הוא נכנס לארנק בלי הרשמה.</p>
+    <label for="am-name">שם</label><input id="am-name" class="in big" maxlength="24" placeholder="איך קוראים לו/לה?" required>
+    <div class="label">צבע</div>${colorDots(color)}
+    <button class="btn primary wide">${icon('user-plus')} הוספה</button></form>`);
+  setTimeout(() => $('#am-name')?.focus(), 350);
+}
+function inviteSheet(pid) {
+  const w = S.wallet, m = w.members[pid];
+  if (!m) return;
+  const link = inviteLink(w.code, pid);
+  openSheet(`<div class="form">
+    <div class="detail-hero">${avatar(m, 'xl')}<h2>הקישור האישי של ${esc(m.name)}</h2></div>
+    ${link ? `<div class="invite-qr">${qrSvg(link)}</div>
+    <p class="hint">מי שפותח את הקישור נכנס ישר לארנק בתור ${esc(m.name)}, בלי הרשמה. אם כבר יש לו חשבון Payoza, הארנק יתווסף לחשבון הקיים. כדאי לשלוח רק לו: הקישור פותח את החשבון שלו.</p>
+    <button type="button" class="uid link-box" data-act="copy-invite" data-id="${pid}"><bdi>${esc(link)}</bdi>${icon('copy')}</button>
+    <div class="grid2"><button class="btn primary" data-act="share-invite" data-id="${pid}">${icon('share-2')} שליחה</button><button class="btn ghost" data-act="copy-invite" data-id="${pid}">${icon('link')} העתקה</button></div>`
+    : `<p class="hint">קישורים אישיים פעילים בגרסת האתר של Payoza.</p>`}
+    ${usedBy(w, pid) ? '' : `<button type="button" class="row-btn danger" data-act="del-member" data-id="${pid}">${icon('trash-2')}<span>הסרת ${esc(m.name)} מהארנק</span></button>`}
+  </div>`);
+}
+async function acceptInvite(code, pid) {
+  app.className = '';
+  app.innerHTML = `<div class="center-msg"><div class="spinner"></div><p>מחברים אותך לארנק…</p></div>`;
+  let w = null;
+  try { w = await store.fetch(code); } catch { /* handled below */ }
+  const g = w?.members?.[pid];
+  if (!g) { toast('הקישור האישי לא תקין, או שהחבר הוסר מהארנק', 'err'); return go('#/'); }
+  if (g.linked && g.linked !== me.uid) {
+    toast('הקישור הזה כבר שויך לחשבון אחר. אפשר להצטרף לארנק כחבר חדש', 'err');
+    return go(`#/j/${code}`);
+  }
+  const fresh = !me.name;
+  if (fresh) { me.name = g.name; me.color = g.color || me.color; }
+  // An open wallet view would re-add the old membership while we move it.
+  unsubscribe();
+  try {
+    const prevId = myIdIn(w.members);
+    // Link first, so every view resolves this user to the invited member from now on.
+    await store.setMember(code, pid, { name: me.name, color: me.color, linked: me.uid, pending: false, claimedAt: Date.now() });
+    // Already in this wallet under another identity: move that history onto the invited member.
+    if (w.members[prevId] && prevId !== pid) {
+      for (const [id, t] of Object.entries(w.tx)) { const t2 = repoint(t, prevId, pid); if (t2) await store.setTx(code, id, t2); }
+      await store.delMember(code, prevId);
+    }
+  } catch { toast('החיבור נכשל. כדאי לפתוח את הקישור שוב', 'err'); return go('#/'); }
+  if (!me.wallets.includes(code)) me.wallets.unshift(code);
+  saveMe();
+  toast(fresh ? `ברוך הבא, ${me.name}! החשבון שלך מוכן` : `${w.meta.name} נוסף לחשבון שלך`);
+  go(`#/w/${code}`);
+}
+function repoint(t, from, to) {
+  let hit = false;
+  const t2 = { ...t };
+  for (const k of ['payer', 'from', 'to', 'by']) if (t2[k] === from) { t2[k] = to; hit = true; }
+  if (t2.shares && from in t2.shares) {
+    t2.shares = { ...t2.shares, [to]: (t2.shares[to] || 0) + t2.shares[from] };
+    delete t2.shares[from]; hit = true;
+  }
+  return hit ? t2 : null;
 }
 function profileSheet() {
   const dark = document.documentElement.dataset.theme === 'dark' || (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches);
@@ -607,6 +682,19 @@ const acts = {
   'new-wallet': () => walletSheet(false), rename: () => walletSheet(true),
   'add-x': () => expenseSheet(), settle: el => settleSheet(el.dataset.from ? { from: el.dataset.from, to: el.dataset.to, amt: el.dataset.amt } : {}),
   tx: el => txSheet(el.dataset.id),
+  'add-member': addMemberSheet,
+  invite: el => inviteSheet(el.dataset.id),
+  'copy-invite': el => copyText(inviteLink(S.wallet.code, el.dataset.id), 'הקישור האישי הועתק'),
+  'share-invite': async el => {
+    const w = S.wallet, m = w.members[el.dataset.id], url = inviteLink(w.code, el.dataset.id);
+    if (navigator.share) { try { await navigator.share({ title: 'Payoza', text: `${m.name}, הוספתי אותך לארנק "${w.meta.name}" ב-Payoza. הקישור האישי שלך:`, url }); return; } catch (e) { if (e?.name === 'AbortError') return; } }
+    copyText(url, 'הקישור האישי הועתק');
+  },
+  'del-member': async el => {
+    if (!el.classList.contains('armed')) { el.classList.add('armed'); $('span', el).textContent = 'לחיצה נוספת להסרה'; return; }
+    closeSheet();
+    try { await store.delMember(S.wallet.code, el.dataset.id); toast('הוסר מהארנק'); } catch { toast('ההסרה נכשלה', 'err'); }
+  },
   'edit-x': el => { const t = S.wallet.tx[el.dataset.id]; closeSheet(); setTimeout(() => expenseSheet({ id: el.dataset.id, ...t }), 200); },
   'del-x': async el => {
     if (!el.classList.contains('armed')) { el.classList.add('armed'); el.innerHTML = icon('trash-2') + ' לחיצה נוספת למחיקה'; return; }
@@ -652,7 +740,10 @@ document.addEventListener('click', e => {
   const fn = acts[el.dataset.act];
   if (fn) { if (el.tagName !== 'A') e.preventDefault(); fn(el, e); }
 });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeSheet();
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('li[data-act]')) { e.preventDefault(); e.target.click(); }
+});
 
 document.addEventListener('input', e => {
   const id = e.target.id;
@@ -689,7 +780,7 @@ const forms = {
     if (!name) return;
     me.name = name; me.color = $('.dot.on', f)?.dataset.c || me.color;
     saveMe(); closeSheet(); toast('הפרופיל עודכן');
-    if (S.wallet) store.setMember(S.wallet.code, me.uid, { name: me.name, color: me.color }).catch(() => {});
+    if (S.wallet) store.setMember(S.wallet.code, MY(), { name: me.name, color: me.color }).catch(() => {});
     render(false);
   },
   restore: async f => {
@@ -717,6 +808,16 @@ const forms = {
       go(`#/w/${code}/crew`);
       toast('הארנק נוצר. אפשר להזמין חברים');
     } catch { toast('הפעולה נכשלה. כדאי לנסות שוב', 'err'); }
+  },
+  'add-member': async f => {
+    const name = $('#am-name', f).value.trim();
+    if (!name) return;
+    const pid = 'IN-' + rand(10), color = $('.dot.on', f)?.dataset.c || COLORS[0];
+    closeSheet();
+    try {
+      await store.setMember(S.wallet.code, pid, { name, color, pending: true, addedBy: MY(), joinedAt: Date.now() });
+      setTimeout(() => inviteSheet(pid), 320);
+    } catch { toast('ההוספה נכשלה. כדאי לנסות שוב', 'err'); }
   },
   expense: submitExpense,
   settle: submitSettle,
@@ -759,7 +860,11 @@ function confetti() {
   store = await createStore(firebaseConfig);
   if (me.name) saveMe();
   refreshRates();
-  const embedJoin = () => { const m = location.hash.match(/^#j-([A-Za-z0-9]+)/); if (m) curHash = '#/j/' + m[1]; return !!m; };
+  const embedJoin = () => {
+    const i = location.hash.match(/^#i-([A-Za-z0-9]+)-([A-Za-z0-9-]+)/);
+    if (i) { curHash = `#/i/${i[1]}/${i[2]}`; return true; }
+    const m = location.hash.match(/^#j-([A-Za-z0-9]+)/); if (m) curHash = '#/j/' + m[1]; return !!m;
+  };
   if (EMBED) { if (!embedJoin()) curHash = ls.get('pz_route') || ''; }
   addEventListener('hashchange', () => { if (!EMBED) curHash = location.hash; else if (!embedJoin()) return; onRoute(); });
   onRoute();
