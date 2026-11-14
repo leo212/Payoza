@@ -1,7 +1,7 @@
 import { icon } from './icons.js';
-import { CATS, CAT, CURS, CUR, COLORS, TRIP_EMOJI } from './data.js';
+import { CATS, CAT, CURS, CUR, COLORS, WALLET_EMOJI } from './data.js';
 import { createStore } from './store.js';
-import { firebaseConfig } from './config.js';
+import { firebaseConfig, canonicalHost } from './config.js';
 
 /* ───────── helpers ───────── */
 const $ = (s, r = document) => r.querySelector(s);
@@ -148,7 +148,7 @@ function subscribe(code) {
     S.wallet = { code, ...snap };
     S.my = myIdIn(snap.members);
     const m = snap.members[S.my];
-    if (!m || (S.my === me.uid && (m.name !== me.name || m.color !== me.color))) {
+    if (!m) {
       store.setMember(code, S.my, { name: me.name, color: me.color, joinedAt: m?.joinedAt || Date.now() }).catch(() => {});
     }
     if (!me.wallets.includes(code)) { me.wallets.unshift(code); saveMe(); }
@@ -249,20 +249,20 @@ function countUp() {
   });
 }
 const counted = (n, cur, sign = false) => `<span data-n="${n}" data-cur="${cur}" data-sign="${sign ? 1 : 0}">${money(n, cur, { sign })}</span>`;
-const logo = `<span class="logo"><span class="logo-mark">${icon('plane')}</span>Payoza</span>`;
+const logo = `<span class="logo"><span class="logo-mark">${icon('wallet')}</span>Payoza</span>`;
 const localBanner = () => store.shared ? '' : `<button class="banner" data-act="local-info">${icon('cloud-off')}<span><b>מצב מקומי.</b> הנתונים נשמרים רק בדפדפן הזה, ושיתוף עם אחרים עדיין לא פעיל.</span></button>`;
 
 function viewWelcome() {
   return `<section class="welcome">
-    <div class="welcome-art"><span class="orbit"><i>${icon('plane')}</i></span><span class="coin c1">₪</span><span class="coin c2">$</span><span class="coin c3">€</span><span class="coin c4">฿</span></div>
+    <div class="welcome-art"><span class="orbit"><i>${icon('coins')}</i></span><span class="coin c1">₪</span><span class="coin c2">$</span><span class="coin c3">€</span><span class="coin c4">฿</span></div>
     <h1>${logo}</h1>
-    <p class="lead">ארנק אחד לכל הטיול. כל אחד מתעד מה שילם, ואנחנו מחשבים מי חייב למי.</p>
+    <p class="lead">ארנק משותף לכל קבוצה ולכל מטרה. כל אחד מתעד מה שילם, ואנחנו מחשבים מי חייב למי.</p>
     <form class="card form" data-form="welcome">
       <label for="wl-name">איך קוראים לך?</label>
       <input id="wl-name" class="in big" maxlength="24" placeholder="השם שיופיע לחברים" autocomplete="given-name" required>
       <div class="label">צבע</div>
       ${colorDots(me.color)}
-      <button class="btn primary">יוצאים לדרך ${icon('arrow-left')}</button>
+      <button class="btn primary">בואו נתחיל ${icon('arrow-left')}</button>
     </form>
     <button class="link" data-act="restore">${icon('key-round')} יש לי כבר מזהה משתמש</button>
   </section>`;
@@ -285,8 +285,8 @@ function viewHome() {
       <button class="me-chip" data-act="profile" aria-label="הפרופיל שלי">${avatar(me)}<span>${esc(me.name)}</span></button>
     </header>
     ${localBanner()}
-    <section class="hello"><h1>לאן נוסעים, ${esc(me.name)}?</h1><p>הארנקים המשותפים שלך</p></section>
-    <section class="trips">${cards || `<div class="empty"><div class="empty-art">${icon('luggage')}</div><b>עוד אין כאן ארנקים</b><p>פותחים ארנק לטיול ומזמינים את החברים, או מצטרפים עם קוד שקיבלת.</p></div>`}</section>
+    <section class="hello"><h1>שלום, ${esc(me.name)}</h1><p>הארנקים המשותפים שלך</p></section>
+    <section class="trips">${cards || `<div class="empty"><div class="empty-art">${icon('wallet')}</div><b>עוד אין כאן ארנקים</b><p>פותחים ארנק משותף ומזמינים את השותפים, או מצטרפים עם קוד שקיבלת.</p></div>`}</section>
     <div class="home-actions">
       <button class="btn primary" data-act="new-wallet">${icon('plus')} ארנק חדש</button>
       <button class="btn ghost" data-act="join">${icon('qr-code')} הצטרפות עם קוד</button>
@@ -330,9 +330,9 @@ function tabHome(w, c, mem) {
       <div class="pass-glow" aria-hidden="true"></div>
       <div class="pass-top"><span class="pass-label">${flat ? 'המאזן שלך' : my > 0 ? 'מגיע לך בחזרה' : 'נשאר לך להחזיר'}</span><button class="pass-code" data-act="copy-code">${icon('copy')}<bdi>${showCode(w.code)}</bdi></button></div>
       <div class="pass-amount ${flat ? '' : my > 0 ? 'up' : 'down'}">${flat ? `<span class="even">${icon('sparkles')} הכול מאוזן</span>` : counted(Math.abs(my), base)}</div>
-      <div class="pass-route" aria-hidden="true"><i></i>${icon('plane')}<i></i></div>
+      <div class="pass-route" aria-hidden="true"><i></i>${icon('coins')}<i></i></div>
       <dl class="pass-stats">
-        <div><dt>סה״כ בטיול</dt><dd>${counted(c.total, base)}</dd></div>
+        <div><dt>סה״כ בארנק</dt><dd>${counted(c.total, base)}</dd></div>
         <div><dt>החלק שלי</dt><dd>${counted(c.share[MY()] || 0, base)}</dd></div>
         <div><dt>שילמתי</dt><dd>${counted(c.paid[MY()] || 0, base)}</dd></div>
       </dl>
@@ -413,6 +413,7 @@ function tabCrew(w, c, mem) {
     <section class="block"><h2>הגדרות הארנק</h2>
       <button class="row-btn" data-act="rename">${icon('pencil')}<span>שם ואימוג׳י</span><small>${esc(w.meta.emoji || '')} ${esc(w.meta.name)}</small>${icon('chevron-left')}</button>
       <div class="row-btn static">${icon('globe')}<span>מטבע המאזן</span><small>${CUR[base]?.flag || ''} ${CUR[base]?.name || base}</small></div>
+      <button class="row-btn" data-act="my-name">${icon('user')}<span>השם שלי בארנק</span><small>${esc(w.members[MY()]?.name || me.name)}</small>${icon('chevron-left')}</button>
       <button class="row-btn" data-act="invite" data-id="${MY()}">${icon('link')}<span>הקישור האישי שלי</span><small>לבן/בת זוג</small>${icon('chevron-left')}</button>
       <button class="row-btn danger" data-act="leave">${icon('log-out')}<span>הסרת הארנק מהרשימה שלי</span></button>
     </section>`;
@@ -577,15 +578,26 @@ function txSheet(id) {
 }
 
 function walletSheet(edit) {
-  const m = edit ? S.wallet.meta : { name: '', emoji: TRIP_EMOJI[0], base: 'ILS' };
+  const m = edit ? S.wallet.meta : { name: '', emoji: WALLET_EMOJI[0], base: 'ILS' };
   openSheet(`<form class="form" data-form="wallet" data-edit="${edit ? 1 : 0}" data-emoji="${esc(m.emoji)}">
-    <h2>${edit ? 'עריכת הארנק' : 'ארנק חדש לטיול'}</h2>
-    <label for="nw-name">שם הטיול</label><input id="nw-name" class="in big" maxlength="32" placeholder="למשל: תאילנד 2027" value="${esc(m.name)}" required>
+    <h2>${edit ? 'עריכת הארנק' : 'ארנק חדש'}</h2>
+    <label for="nw-name">שם הארנק</label><input id="nw-name" class="in big" maxlength="32" placeholder="למשל: הדירה ברחוב הרצל, ועד הבית" value="${esc(m.name)}" required>
+    ${edit ? '' : `<label for="nw-me">השם שלך בארנק הזה</label><input id="nw-me" class="in" maxlength="32" value="${esc(me.name)}" required><p class="hint">כך יראו אותך השותפים בארנק הזה, למשל "יעל וליאור" או "דירה 5".</p>`}
     <div class="label">אימוג׳י</div>
-    <div class="emoji-grid">${TRIP_EMOJI.map(e => `<button type="button" class="emoji${e === m.emoji ? ' on' : ''}" data-act="emoji" data-e="${e}">${e}</button>`).join('')}</div>
+    <div class="emoji-grid">${WALLET_EMOJI.map(e => `<button type="button" class="emoji${e === m.emoji ? ' on' : ''}" data-act="emoji" data-e="${e}">${e}</button>`).join('')}</div>
     ${edit ? '' : `<label for="nw-cur">מטבע המאזן</label><select id="nw-cur" class="in">${curOptions('ILS')}</select><p class="hint">הוצאות בכל מטבע יומרו למטבע הזה לצורך המאזן. אי אפשר לשנות אותו אחר כך.</p>`}
     <button class="btn primary wide">${icon('check')} ${edit ? 'שמירה' : 'יצירת הארנק'}</button></form>`);
   setTimeout(() => $('#nw-name')?.focus(), 350);
+}
+function myNameSheet() {
+  const m = S.wallet.members[MY()] || { name: me.name, color: me.color };
+  openSheet(`<form class="form" data-form="my-name">
+    <h2>השם שלי בארנק</h2>
+    <p class="hint">השם והצבע שהשותפים רואים בארנק "${esc(S.wallet.meta.name)}". בכל ארנק אפשר לקבוע שם אחר, והפרופיל לא משתנה.${linksOf(m).length ? ' השם משותף לכל מי שנכנס בתור החבר הזה.' : ''}</p>
+    <label for="mn-name">שם</label><input id="mn-name" class="in big" maxlength="32" value="${esc(m.name)}" required>
+    <div class="label">צבע</div>${colorDots(m.color)}
+    <button class="btn primary wide">${icon('check')} שמירה</button></form>`);
+  setTimeout(() => $('#mn-name')?.select(), 350);
 }
 function addMemberSheet() {
   const used = new Set(membersOf(S.wallet).map(m => m.color));
@@ -609,7 +621,7 @@ async function inviteSheet(pid) {
   const mine = pid === MY(), link = inviteLink(w.code, token), n = devicesOf(pid, S.wallet.members[pid] || m);
   const who = esc(m.name);
   const hint = mine
-    ? `מי שפותח את הקישור נכנס לארנק בתור ${who}: רואה את אותו מאזן ויכול להוסיף ולערוך הוצאות. מתאים לבן או בת הזוג שאיתך בטיול.`
+    ? `מי שפותח את הקישור נכנס לארנק בתור ${who}: רואה את אותו מאזן ויכול להוסיף ולערוך הוצאות. מתאים למשל לבן או בת הזוג.`
     : isPending(m)
       ? `מי שפותח את הקישור נכנס ישר לארנק בתור ${who}, בלי הרשמה. אם כבר יש לו חשבון Payoza, הארנק יתווסף לחשבון הקיים.`
       : `מי שפותח את הקישור נכנס לארנק בתור ${who} ומשתף איתו את אותו מאזן, למשל בן או בת הזוג.`;
@@ -673,6 +685,7 @@ function profileSheet() {
   openSheet(`<form class="form" data-form="profile">
     <h2>הפרופיל שלי</h2>
     <label for="pf-name">שם</label><input id="pf-name" class="in big" maxlength="24" value="${esc(me.name)}" required>
+    <p class="hint">שם ברירת המחדל לארנקים חדשים. בתוך כל ארנק אפשר לקבוע שם אחר, בלשונית "חברים".</p>
     <div class="label">צבע</div>${colorDots(me.color)}
     <button class="btn primary wide">${icon('check')} שמירה</button>
     <div class="label">מזהה המשתמש שלי</div>
@@ -707,6 +720,7 @@ const acts = {
   'add-x': () => expenseSheet(), settle: el => settleSheet(el.dataset.from ? { from: el.dataset.from, to: el.dataset.to, amt: el.dataset.amt } : {}),
   tx: el => txSheet(el.dataset.id),
   'add-member': addMemberSheet,
+  'my-name': myNameSheet,
   invite: el => inviteSheet(el.dataset.id),
   'copy-invite': el => copyText($('.link-box bdi')?.textContent || linkOfMember(el.dataset.id), 'הקישור האישי הועתק'),
   'share-invite': async el => {
@@ -805,7 +819,6 @@ const forms = {
     if (!name) return;
     me.name = name; me.color = $('.dot.on', f)?.dataset.c || me.color;
     saveMe(); closeSheet(); toast('הפרופיל עודכן');
-    if (S.wallet && MY() === me.uid) store.setMember(S.wallet.code, me.uid, { name: me.name, color: me.color }).catch(() => {});
     render(false);
   },
   restore: async f => {
@@ -828,11 +841,18 @@ const forms = {
       if (f.dataset.edit === '1') { await store.updateWallet(S.wallet.code, { name, emoji }); return toast('הארנק עודכן'); }
       const code = rand(8);
       await store.createWallet(code, { name, emoji, base: $('#nw-cur', f).value, createdAt: Date.now(), createdBy: me.uid });
-      await store.setMember(code, me.uid, { name: me.name, color: me.color, joinedAt: Date.now() });
+      await store.setMember(code, me.uid, { name: $('#nw-me', f).value.trim() || me.name, color: me.color, joinedAt: Date.now() });
       me.wallets.unshift(code); saveMe();
       go(`#/w/${code}/crew`);
       toast('הארנק נוצר. אפשר להזמין חברים');
     } catch { toast('הפעולה נכשלה. כדאי לנסות שוב', 'err'); }
+  },
+  'my-name': async f => {
+    const name = $('#mn-name', f).value.trim();
+    if (!name) return;
+    closeSheet();
+    try { await store.setMember(S.wallet.code, MY(), { name, color: $('.dot.on', f)?.dataset.c || me.color }); toast('השם בארנק עודכן'); }
+    catch { toast('השמירה נכשלה. כדאי לנסות שוב', 'err'); }
   },
   'add-member': async f => {
     const name = $('#am-name', f).value.trim();
@@ -877,12 +897,44 @@ function confetti() {
   })(t0);
 }
 
+/* ───────── canonical address ───────── */
+// Accounts live in each address's own browser storage, so the move carries the
+// user id in the URL fragment (never sent to any server) and the new address
+// restores the account from it.
+const MOVE = '#pzmove:';
+async function moveToCanonical() {
+  if (EMBED || !canonicalHost || location.hostname === canonicalHost) return false;
+  if (!/\.(web\.app|firebaseapp\.com)$/.test(location.hostname)) return false;
+  // Only move once the new address really serves the app (DNS and certificate ready).
+  try {
+    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 3000);
+    await fetch(`https://${canonicalHost}/js/config.js`, { mode: 'no-cors', cache: 'no-store', signal: ctl.signal });
+    clearTimeout(t);
+  } catch { return false; }
+  const carry = me.name ? `${MOVE}${encodeURIComponent(me.uid)}|` : '';
+  location.replace(`https://${canonicalHost}${location.pathname}${carry}${location.hash}`);
+  return true;
+}
+async function arriveFromMove() {
+  if (!location.hash.startsWith(MOVE)) return;
+  const [uid, ...rest] = decodeURIComponent(location.hash.slice(MOVE.length)).split('|');
+  history.replaceState(null, '', location.pathname + location.search + rest.join('|'));
+  curHash = location.hash;
+  if (me.name || !/^PZ-[A-Z0-9-]{8,20}$/.test(uid)) return; // keep an account this address already has
+  try {
+    const u = await store.getUser(uid);
+    if (u?.name) { Object.assign(me, { uid, name: u.name, color: u.color || me.color, wallets: u.wallets || [] }); saveMe(false); }
+  } catch { /* the user can still restore with their id */ }
+}
+
 /* ───────── boot ───────── */
 (async function boot() {
   const th = ls.get('pz_theme');
   if (th) document.documentElement.dataset.theme = th;
   loadMe();
+  if (await moveToCanonical()) return;
   store = await createStore(firebaseConfig);
+  await arriveFromMove();
   if (me.name) saveMe();
   refreshRates();
   const embedJoin = () => {

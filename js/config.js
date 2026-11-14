@@ -7,3 +7,7 @@ export const firebaseConfig = {
   messagingSenderId: '567155102573',
   appId: '1:567155102573:web:9704e0adfccb4d3e998064',
 };
+
+// The app's public address. Visits to the default Firebase addresses move here,
+// bringing the visitor's account along. Set to null to stay on any address.
+export const canonicalHost = 'payoza.roymam.com';
