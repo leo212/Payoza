@@ -21,7 +21,37 @@ const newId = () => Date.now().toString(36) + rand(6).toLowerCase();
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
 const cleanCode = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 const showCode = c => c.length > 4 ? c.slice(0, 4) + '-' + c.slice(4) : c;
-const num = v => { const n = parseFloat(String(v).replace(',', '.')); return Number.isFinite(n) ? n : 0; };
+// Reads an amount the way people type or paste it: "₪ 2,612.93", "2.612,93",
+// "1,5", Arabic-Indic digits, or text carrying invisible direction marks
+// (phone keyboards and spreadsheets add them). Returns 0 when there is no number.
+function num(v) {
+  let s = String(v ?? '')
+    .replace(/[\u0660-\u0669]/g, d => d.charCodeAt(0) - 0x660)
+    .replace(/[\u06F0-\u06F9]/g, d => d.charCodeAt(0) - 0x6F0)
+    .replace(/[\uFF10-\uFF19]/g, d => d.charCodeAt(0) - 0xFF10)
+    .replace(/[\u066B\uFF0E]/g, '.').replace(/[\uFF0C]/g, ',')
+    .replace(/[^\d.,]/g, '');
+  const dot = s.lastIndexOf('.'), comma = s.lastIndexOf(',');
+  if (dot >= 0 && comma >= 0) {
+    // Both present: the last one is the decimal point, the other groups thousands.
+    s = dot > comma ? s.replace(/,/g, '') : s.replace(/\./g, '').replace(',', '.');
+  } else if (comma >= 0) {
+    s = /^\d{1,3}(,\d{3})+$/.test(s) ? s.replace(/,/g, '') : s.replace(/,(?=[^,]*$)/, '.').replace(/,/g, '');
+  } else if (s.indexOf('.') !== dot) {
+    s = /^\d{1,3}(\.\d{3})+$/.test(s) ? s.replace(/\./g, '') : s.replace(/\.(?=.*\.)/g, '');
+  }
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : 0;
+}
+const AMOUNT_FIELDS = ['xf-amt', 'sf-amt', 'xf-rate', 'sf-rate'];
+// Rewrite a field's text as a plain number when it holds anything but digits and a
+// separator, or right after a paste, so what the person sees is what gets saved.
+function tidyAmount(el, pasted) {
+  const v = el.value;
+  if (!v || (!pasted && !/[^\d.,]/.test(v))) return;
+  const n = num(v);
+  el.value = n ? String(el.id.endsWith('rate') ? n : +n.toFixed(2)) : '';
+}
 
 function fmtNum(n) {
   const a = Math.abs(n);
@@ -690,40 +720,49 @@ async function acceptInvite(code, token) {
   const pid = token.startsWith('IN-') && members[token] ? token : Object.keys(members).find(k => members[k].key === token);
   const g = pid && members[pid];
   if (!g) { toast('הקישור האישי לא תקין, או שהחבר הוסר מהארנק', 'err'); return go('#/'); }
+  const prevId = myIdIn(members), prev = members[prevId];
+  // Already in this wallet as someone else: never change anything without asking.
+  // (Opening a partner's link on your own phone must not touch your membership.)
+  if (prev && prevId !== pid) return chooseIdentity(w, code, prevId, pid);
   const fresh = !me.name;
   if (fresh) { me.name = g.name; me.color = g.color || me.color; }
-  const prevId = myIdIn(members);
   if (prevId !== pid && pid !== me.uid) {
-    // An open wallet view would re-add the old membership while we move it.
-    unsubscribe();
-    try {
-      // Link first, so every view resolves this device to the shared member from now on.
-      await store.setMember(code, pid, { links: [...linksOf(g), me.uid], pending: false, claimedAt: Date.now() });
-      const prev = members[prevId];
-      if (prevId === me.uid && prev) {
-        // This device had its own membership here: move its history onto the shared member.
-        for (const [id, t] of Object.entries(w.tx)) { const t2 = repoint(t, prevId, pid); if (t2) await store.setTx(code, id, t2); }
-        await store.delMember(code, prevId);
-      } else if (prev) {
-        // It was joined to another member through a link: just leave that one.
-        await store.setMember(code, prevId, { links: linksOf(prev).filter(u => u !== me.uid), linked: null });
-      }
-    } catch { toast('החיבור נכשל. כדאי לפתוח את הקישור שוב', 'err'); return go('#/'); }
+    try { await store.setMember(code, pid, { links: [...linksOf(g), me.uid], pending: false, claimedAt: Date.now() }); }
+    catch { toast('החיבור נכשל. כדאי לפתוח את הקישור שוב', 'err'); return go('#/'); }
   }
   if (!me.wallets.includes(code)) me.wallets.unshift(code);
   saveMe();
   toast(fresh ? `ברוך הבא! נכנסת לארנק בתור ${g.name}` : `${w.meta.name}: נכנסת בתור ${g.name}`);
   go(`#/w/${code}`);
 }
-function repoint(t, from, to) {
-  let hit = false;
-  const t2 = { ...t };
-  for (const k of ['payer', 'from', 'to', 'by']) if (t2[k] === from) { t2[k] = to; hit = true; }
-  if (t2.shares && from in t2.shares) {
-    t2.shares = { ...t2.shares, [to]: (t2.shares[to] || 0) + t2.shares[from] };
-    delete t2.shares[from]; hit = true;
-  }
-  return hit ? t2 : null;
+function chooseIdentity(w, code, prevId, pid) {
+  const prev = w.members[prevId], g = w.members[pid];
+  const own = prevId === me.uid, keepsHistory = own && usedBy(w, prevId);
+  app.innerHTML = `<section class="center-msg choose">
+    <div class="choose-avs">${avatar(prev, 'xl')}${icon('arrow-left-right')}${avatar(g, 'xl')}</div>
+    <b>כבר נמצא/ת בארנק "${esc(w.meta.name)}"</b>
+    <p>במכשיר הזה נכנסת בתור <b>${esc(prev.name)}</b>, והקישור שפתחת הוא של <b>${esc(g.name)}</b>. אם זה קישור ששלחת לשותף, אין צורך לעשות כלום: הוא יעבוד אצלו.</p>
+    <button class="btn primary wide" data-act="stay-as" data-code="${code}">${icon('check')} להמשיך בתור ${esc(prev.name)}</button>
+    <button class="btn ghost wide" data-act="switch-as" data-code="${code}" data-from="${prevId}" data-to="${pid}">${icon('arrow-left-right')} לעבור במכשיר הזה ל${esc(g.name)}</button>
+    <p class="hint">המעבר משנה רק את המכשיר הזה. ${keepsHistory ? `ההוצאות של ${esc(prev.name)} נשארות שלו, ואפשר לחזור אליו דרך הקישור האישי שלו.` : 'שום הוצאה לא משתנה.'}</p>
+  </section>`;
+}
+async function switchIdentity(code, from, to) {
+  let w = null;
+  try { w = await store.fetch(code); } catch { /* handled below */ }
+  const prev = w?.members?.[from], g = w?.members?.[to];
+  if (!g) { toast('החבר לא נמצא בארנק', 'err'); return go(`#/w/${code}`); }
+  try {
+    await store.setMember(code, to, { links: [...new Set([...linksOf(g), me.uid])], pending: false, claimedAt: Date.now() });
+    if (prev && from === me.uid) {
+      // An own membership with no expenses is just a leftover from joining by code.
+      if (!usedBy(w, from)) await store.delMember(code, from);
+    } else if (prev) {
+      await store.setMember(code, from, { links: linksOf(prev).filter(u => u !== me.uid), linked: null });
+    }
+  } catch { toast('המעבר נכשל. כדאי לנסות שוב', 'err'); return go(`#/w/${code}`); }
+  toast(`במכשיר הזה את/ה עכשיו ${g.name}`);
+  go(`#/w/${code}`);
 }
 function profileSheet() {
   const dark = document.documentElement.dataset.theme === 'dark' || (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches);
@@ -765,6 +804,8 @@ const acts = {
   'add-x': () => expenseSheet(), settle: el => settleSheet(el.dataset.from ? { from: el.dataset.from, to: el.dataset.to, amt: el.dataset.amt } : {}),
   tx: el => txSheet(el.dataset.id),
   'add-member': addMemberSheet,
+  'stay-as': el => go(`#/w/${el.dataset.code}`),
+  'switch-as': el => switchIdentity(el.dataset.code, el.dataset.from, el.dataset.to),
   'my-name': myNameSheet,
   invite: el => inviteSheet(el.dataset.id),
   'copy-invite': el => copyText($('.link-box bdi')?.textContent || linkOfMember(el.dataset.id), 'הקישור האישי הועתק'),
@@ -833,10 +874,17 @@ document.addEventListener('keydown', e => {
 
 document.addEventListener('input', e => {
   const id = e.target.id;
+  if (AMOUNT_FIELDS.includes(id)) tidyAmount(e.target, e.inputType === 'insertFromPaste' || e.inputType === 'insertFromDrop');
   if (id === 'xf-amt' || id === 'xf-rate') refreshSplit();
   if (id === 'xf-cat-q') filterCats(e.target.value);
   if (id === 'rs-uid' || id === 'jn-code') e.target.value = e.target.value.toUpperCase();
 });
+['keyup', 'compositionend', 'blur'].forEach(type => document.addEventListener(type, e => {
+  const id = e.target?.id;
+  if (!AMOUNT_FIELDS.includes(id)) return;
+  if (type === 'blur') tidyAmount(e.target, true);
+  if (id.startsWith('xf-')) refreshSplit();
+}, true));
 document.addEventListener('change', e => {
   const base = S.wallet?.meta.base;
   if (e.target.id === 'xf-cur') {
