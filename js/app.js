@@ -98,13 +98,19 @@ let store;
 const S = { route: { v: 'home' }, wallet: null, code: null, unsub: null, missing: false, sums: ls.get('pz_sums') || {} };
 const app = $('#app');
 
+// Inside a Claude artifact the page cannot own the URL, so routes live in memory there.
+const EMBED = !!window.claude?.use;
+let curHash = EMBED ? '' : location.hash;
 function parseRoute() {
-  const p = location.hash.replace(/^#\/?/, '').split('/');
+  const p = curHash.replace(/^#\/?/, '').split('/');
   if (p[0] === 'w' && p[1]) return { v: 'wallet', code: cleanCode(p[1]), tab: ['home', 'tx', 'settle', 'crew'].includes(p[2]) ? p[2] : 'home' };
   if (p[0] === 'j' && p[1]) return { v: 'join', code: cleanCode(p[1]) };
   return { v: 'home' };
 }
-const go = h => { if (location.hash === h) onRoute(); else location.hash = h; };
+const go = h => {
+  if (EMBED) { curHash = h; ls.set('pz_route', h); onRoute(); }
+  else if (location.hash === h) onRoute(); else location.hash = h;
+};
 
 function onRoute() {
   const r = parseRoute();
@@ -401,7 +407,7 @@ function tabCrew(w, c, mem) {
       <button class="row-btn danger" data-act="leave">${icon('log-out')}<span>הסרת הארנק מהרשימה שלי</span></button>
     </section>`;
 }
-const shareLink = code => `${location.origin}${location.pathname}#/j/${code}`;
+const shareLink = code => EMBED ? (window.PZ_URL ? `${window.PZ_URL}#j-${code}` : showCode(code)) : `${location.origin}${location.pathname}#/j/${code}`;
 function qrSvg(text) {
   try {
     const q = window.qrcode(0, 'M'); q.addData(text); q.make();
@@ -636,9 +642,11 @@ const acts = {
     root.dataset.theme = dark ? 'light' : 'dark'; ls.set('pz_theme', root.dataset.theme);
     closeSheet();
   },
-  'local-info': () => openSheet(`<div class="form"><h2>מצב מקומי</h2><p>האפליקציה עדיין לא מחוברת לענן, ולכן הארנקים נשמרים רק בדפדפן הזה. קוד או קישור הצטרפות יעבדו רק במכשיר הזה.</p><p class="hint">להפעלת שיתוף אמיתי בין מכשירים צריך להדביק הגדרות Firebase בקובץ <bdi>js/config.js</bdi>. ההוראות נמצאות בקובץ README.</p><button class="btn primary wide" data-act="close">הבנתי</button></div>`),
+  'local-info': () => openSheet(`<div class="form"><h2>מצב מקומי</h2><p>האפליקציה עדיין לא מחוברת לענן, ולכן הארנקים נשמרים רק בדפדפן הזה. קוד או קישור הצטרפות יעבדו רק במכשיר הזה.</p><p class="hint">${EMBED ? 'כדי לשמור ולשתף נתונים צריך להיות מחוברים לחשבון Claude.' : 'להפעלת שיתוף אמיתי בין מכשירים צריך להדביק הגדרות Firebase בקובץ <bdi>js/config.js</bdi>. ההוראות נמצאות בקובץ README.'}</p><button class="btn primary wide" data-act="close">הבנתי</button></div>`),
 };
 document.addEventListener('click', e => {
+  const a = EMBED && e.target.closest('a[href^="#/"]');
+  if (a) { e.preventDefault(); return go(a.getAttribute('href')); }
   const el = e.target.closest('[data-act]');
   if (!el) return;
   const fn = acts[el.dataset.act];
@@ -751,6 +759,8 @@ function confetti() {
   store = await createStore(firebaseConfig);
   if (me.name) saveMe();
   refreshRates();
-  addEventListener('hashchange', onRoute);
+  const embedJoin = () => { const m = location.hash.match(/^#j-([A-Za-z0-9]+)/); if (m) curHash = '#/j/' + m[1]; return !!m; };
+  if (EMBED) { if (!embedJoin()) curHash = ls.get('pz_route') || ''; }
+  addEventListener('hashchange', () => { if (!EMBED) curHash = location.hash; else if (!embedJoin()) return; onRoute(); });
   onRoute();
 })();

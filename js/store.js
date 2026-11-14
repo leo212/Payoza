@@ -9,6 +9,11 @@
 const FB = '10.12.2';
 
 export async function createStore(config) {
+  if (window.claude?.use) {
+    // Running as a Claude artifact: the platform's shared database is the only backend the page may reach.
+    const db = await window.claude.use('db').catch(() => null);
+    return db ? claudeStore(db) : localStore();
+  }
   if (config) {
     try { return await firebaseStore(config); }
     catch (e) { console.error('Firebase init failed, falling back to local mode', e); }
@@ -87,6 +92,42 @@ function localStore() {
       watchers.get(code).add(cb);
       queueMicrotask(() => cb(snap(code)));
       return () => watchers.get(code).delete(cb);
+    },
+  };
+}
+
+function claudeStore(db) {
+  const W = code => db.doc('wallets/' + code);
+  const data = s => (s.exists ? { ...s.data() } : null);
+  const map = q => Object.fromEntries(q.docs.map(d => [d.id, { ...d.data() }]));
+  // `update` needs an existing document, so merge by read-then-set.
+  const merge = async (ref, patch) => ref.set({ ...(data(await ref.get()) || {}), ...patch });
+  return {
+    shared: true,
+    getUser: async uid => data(await db.doc('users/' + uid).get()),
+    saveUser: (uid, patch) => merge(db.doc('users/' + uid), patch),
+    getMeta: async code => data(await W(code).get()),
+    createWallet: (code, meta) => W(code).set(meta),
+    updateWallet: (code, patch) => merge(W(code), patch),
+    setMember: (code, uid, d) => merge(W(code).collection('members').doc(uid), d),
+    setTx: (code, id, d) => W(code).collection('tx').doc(id).set(d),
+    delTx: (code, id) => W(code).collection('tx').doc(id).delete(),
+    async fetch(code) {
+      const meta = await this.getMeta(code);
+      if (!meta) return null;
+      const [m, t] = await Promise.all([W(code).collection('members').get(), W(code).collection('tx').get()]);
+      return { meta, members: map(m), tx: map(t) };
+    },
+    watch(code, cb, onErr) {
+      const st = {};
+      const emit = () => { if ('meta' in st && st.members && st.tx) cb(st.meta ? { meta: st.meta, members: st.members, tx: st.tx } : null); };
+      const err = e => onErr && onErr(e);
+      const u = [
+        W(code).onSnapshot(s => { st.meta = data(s); emit(); }, err),
+        W(code).collection('members').onSnapshot(q => { st.members = map(q); emit(); }, err),
+        W(code).collection('tx').onSnapshot(q => { st.tx = map(q); emit(); }, err),
+      ];
+      return () => u.forEach(f => f());
     },
   };
 }
