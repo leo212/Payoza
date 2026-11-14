@@ -10,4 +10,4 @@ export const firebaseConfig = {
 
 // The app's public address. Visits to the default Firebase addresses move here,
 // bringing the visitor's account along. Set to null to stay on any address.
-export const canonicalHost = 'payzo.roymam.com';
+export const canonicalHost = 'payoza.roymam.com';
