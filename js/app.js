@@ -21,7 +21,37 @@ const newId = () => Date.now().toString(36) + rand(6).toLowerCase();
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
 const cleanCode = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 const showCode = c => c.length > 4 ? c.slice(0, 4) + '-' + c.slice(4) : c;
-const num = v => { const n = parseFloat(String(v).replace(',', '.')); return Number.isFinite(n) ? n : 0; };
+// Reads an amount the way people type or paste it: "₪ 2,612.93", "2.612,93",
+// "1,5", Arabic-Indic digits, or text carrying invisible direction marks
+// (phone keyboards and spreadsheets add them). Returns 0 when there is no number.
+function num(v) {
+  let s = String(v ?? '')
+    .replace(/[\u0660-\u0669]/g, d => d.charCodeAt(0) - 0x660)
+    .replace(/[\u06F0-\u06F9]/g, d => d.charCodeAt(0) - 0x6F0)
+    .replace(/[\uFF10-\uFF19]/g, d => d.charCodeAt(0) - 0xFF10)
+    .replace(/[\u066B\uFF0E]/g, '.').replace(/[\uFF0C]/g, ',')
+    .replace(/[^\d.,]/g, '');
+  const dot = s.lastIndexOf('.'), comma = s.lastIndexOf(',');
+  if (dot >= 0 && comma >= 0) {
+    // Both present: the last one is the decimal point, the other groups thousands.
+    s = dot > comma ? s.replace(/,/g, '') : s.replace(/\./g, '').replace(',', '.');
+  } else if (comma >= 0) {
+    s = /^\d{1,3}(,\d{3})+$/.test(s) ? s.replace(/,/g, '') : s.replace(/,(?=[^,]*$)/, '.').replace(/,/g, '');
+  } else if (s.indexOf('.') !== dot) {
+    s = /^\d{1,3}(\.\d{3})+$/.test(s) ? s.replace(/\./g, '') : s.replace(/\.(?=.*\.)/g, '');
+  }
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : 0;
+}
+const AMOUNT_FIELDS = ['xf-amt', 'sf-amt', 'xf-rate', 'sf-rate'];
+// Rewrite a field's text as a plain number when it holds anything but digits and a
+// separator, or right after a paste, so what the person sees is what gets saved.
+function tidyAmount(el, pasted) {
+  const v = el.value;
+  if (!v || (!pasted && !/[^\d.,]/.test(v))) return;
+  const n = num(v);
+  el.value = n ? String(el.id.endsWith('rate') ? n : +n.toFixed(2)) : '';
+}
 
 function fmtNum(n) {
   const a = Math.abs(n);
@@ -833,10 +863,17 @@ document.addEventListener('keydown', e => {
 
 document.addEventListener('input', e => {
   const id = e.target.id;
+  if (AMOUNT_FIELDS.includes(id)) tidyAmount(e.target, e.inputType === 'insertFromPaste' || e.inputType === 'insertFromDrop');
   if (id === 'xf-amt' || id === 'xf-rate') refreshSplit();
   if (id === 'xf-cat-q') filterCats(e.target.value);
   if (id === 'rs-uid' || id === 'jn-code') e.target.value = e.target.value.toUpperCase();
 });
+['keyup', 'compositionend', 'blur'].forEach(type => document.addEventListener(type, e => {
+  const id = e.target?.id;
+  if (!AMOUNT_FIELDS.includes(id)) return;
+  if (type === 'blur') tidyAmount(e.target, true);
+  if (id.startsWith('xf-')) refreshSplit();
+}, true));
 document.addEventListener('change', e => {
   const base = S.wallet?.meta.base;
   if (e.target.id === 'xf-cur') {
